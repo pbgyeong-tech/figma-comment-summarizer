@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Figma Plugin</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-size: 12px;
+      color: #333;
+      background-color: #fff;
+      padding: 16px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+    }
+
+    p {
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-weight: 500;
+      color: #444;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: #18a0fb;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background-color: #18a0fb;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #0d8de5;
+    }
+
+    .btn-secondary {
+      background-color: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background-color: #e0e0e0;
+    }
+
+    .message {
+      padding: 10px;
+      border-radius: 6px;
+      background-color: #f5f5f5;
+      color: #666;
+      text-align: center;
+      display: none;
+    }
+
+    .message.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div>
+      <h1>My Figma Plugin</h1>
+      <p>Figma 플러그인에 오신 것을 환영합니다.</p>
+    </div>
+
+    <div class="input-group">
+      <label for="count">생성할 사각형 개수</label>
+      <input type="number" id="count" value="5" min="1" max="20">
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" id="create">생성하기</button>
+      <button class="btn-secondary" id="cancel">닫기</button>
+    </div>
+
+    <div class="message" id="message"></div>
+  </div>
+
+  <script>
+    const countInput = document.getElementById('count');
+    const createBtn = document.getElementById('create');
+    const cancelBtn = document.getElementById('cancel');
+    const messageEl = document.getElementById('message');
+
+    // 사각형 생성 버튼 클릭
+    createBtn.addEventListener('click', () => {
+      const count = parseInt(countInput.value, 10) || 5;
+      parent.postMessage({ pluginMessage: { type: 'create-rectangles', count } }, '*');
+    });
+
+    // 닫기 버튼 클릭
+    cancelBtn.addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+    });
+
+    // 플러그인 코드에서 메시지 수신
+    window.onmessage = (event) => {
+      const message = event.data.pluginMessage;
+      if (message && message.type === 'result') {
+        messageEl.textContent = message.text;
+        messageEl.classList.add('show');
+        setTimeout(() => {
+          messageEl.classList.remove('show');
+        }, 3000);
+      }
+    };
+  </script>
+</body>
+</html>
