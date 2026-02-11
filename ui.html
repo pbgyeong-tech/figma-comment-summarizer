@@ -548,6 +548,30 @@
       font-size: 11px;
     }
 
+    /* ===== Hierarchy Sub-Group ===== */
+    .sub-group-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      margin: 8px 0 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .sub-group-header .sub-icon {
+      font-size: 12px;
+    }
+
+    .sub-group-header .sub-count {
+      margin-left: auto;
+      font-weight: 400;
+      font-size: 10px;
+      color: #999;
+    }
+
     /* ===== Accordion Toggle ===== */
     .group-toggle {
       display: flex;
@@ -1322,31 +1346,70 @@ JSON 형식으로만 응답:
         // 코멘트 목록 (기본 접힌 상태)
         html += `<div class="comment-items-container collapsed" data-frame-items="${frameName}">`;
 
-        // 우선순위 urgent 먼저, 그 다음 최신순
-        const sorted = [...groupComments].sort((a, b) => {
-          if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-          if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-          return new Date(b.created_at) - new Date(a.created_at);
+        // 계층별 서브 그룹핑 (hierarchy[1:]로 하위 경로 추출)
+        const subGroups = {};
+        groupComments.forEach(c => {
+          const h = c.hierarchy || [];
+          // hierarchy[0]은 최상위 Section (이미 그룹핑됨), [1:]이 하위 경로
+          const subPath = h.length > 1
+            ? h.slice(1).map(a => a.name).join(' > ')
+            : '일반';
+          if (!subGroups[subPath]) subGroups[subPath] = [];
+          subGroups[subPath].push(c);
         });
 
-        sorted.forEach(comment => {
-          const cat = CATEGORY_MAP[comment.category] || CATEGORY_MAP.discussion;
-          const urgentBadge = comment.priority === 'urgent'
-            ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
-            : '';
-          const nodeId = comment.resolvedNodeId || comment.client_meta?.node_id || '';
-          const checkedAttr = comment.checked ? 'checked' : '';
-          const checkedStyle = comment.checked ? 'opacity: 0.5;' : '';
+        const subKeys = Object.keys(subGroups).sort((a, b) => {
+          if (a === '일반') return 1;
+          if (b === '일반') return -1;
+          return subGroups[b].length - subGroups[a].length;
+        });
 
-          html += `
-            <div class="comment-item" data-node-id="${nodeId}" data-comment-id="${comment.id}" style="${checkedStyle}">
-              <input type="checkbox" class="comment-checkbox" data-id="${comment.id}" ${checkedAttr}>
-              <div class="comment-content">
-                <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
-                <p class="comment-summary">${comment.summary || comment.message.substring(0, 30)}</p>
-                <p class="comment-meta">@${comment.user?.handle || 'unknown'} · ${formatRelativeTime(comment.created_at)}</p>
-              </div>
+        const hasMultipleSubs = subKeys.length > 1 || (subKeys.length === 1 && subKeys[0] !== '일반');
+
+        subKeys.forEach(subPath => {
+          const subComments = subGroups[subPath];
+
+          // 서브 그룹 헤더 (2개 이상 서브그룹이 있을 때만 표시)
+          if (hasMultipleSubs && subPath !== '일반') {
+            html += `<div class="sub-group-header">
+              <span class="sub-icon">📂</span>
+              <span>${subPath}</span>
+              <span class="sub-count">${subComments.length}건</span>
             </div>`;
+          } else if (hasMultipleSubs && subPath === '일반') {
+            html += `<div class="sub-group-header">
+              <span class="sub-icon">📎</span>
+              <span>기타 코멘트</span>
+              <span class="sub-count">${subComments.length}건</span>
+            </div>`;
+          }
+
+          // 우선순위 urgent 먼저, 그 다음 최신순
+          const sorted = [...subComments].sort((a, b) => {
+            if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+            if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+          });
+
+          sorted.forEach(comment => {
+            const cat = CATEGORY_MAP[comment.category] || CATEGORY_MAP.discussion;
+            const urgentBadge = comment.priority === 'urgent'
+              ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
+              : '';
+            const nodeId = comment.resolvedNodeId || comment.client_meta?.node_id || '';
+            const checkedAttr = comment.checked ? 'checked' : '';
+            const checkedStyle = comment.checked ? 'opacity: 0.5;' : '';
+
+            html += `
+              <div class="comment-item" data-node-id="${nodeId}" data-comment-id="${comment.id}" style="${checkedStyle}">
+                <input type="checkbox" class="comment-checkbox" data-id="${comment.id}" ${checkedAttr}>
+                <div class="comment-content">
+                  <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
+                  <p class="comment-summary">${comment.summary || comment.message.substring(0, 30)}</p>
+                  <p class="comment-meta">@${comment.user?.handle || 'unknown'} · ${formatRelativeTime(comment.created_at)}</p>
+                </div>
+              </div>`;
+          });
         });
 
         html += `</div>`; // comment-items-container

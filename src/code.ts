@@ -135,38 +135,45 @@ async function requestFetchComments(range: string): Promise<void> {
   });
 }
 
-// 노드의 소속 프레임 정보 조회 (그룹핑용)
-function getNodeFrameInfo(nodeId: string): { frameName: string; frameId: string } | null {
+// 노드의 계층 정보 조회 (Section > Sub-Section > Frame)
+interface NodeAncestor {
+  name: string;
+  id: string;
+  type: string;  // 'SECTION', 'FRAME', 'GROUP', etc.
+}
+
+function getNodeHierarchy(nodeId: string): { frameName: string; frameId: string; hierarchy: NodeAncestor[] } | null {
   try {
-    // 1차 시도: 원본 node_id 사용
     let node = figma.getNodeById(nodeId);
 
-    // 2차 시도: node_id 형식 변환 ("1:234" → 다른 포맷)
     if (!node && nodeId.includes(':')) {
-      // Figma REST API는 "페이지ID:노드ID" 형태, 그대로 사용해야 함
-      // getNodeById가 null일 수 있는 이유: 다른 페이지, 삭제된 노드
-      console.log(`  ⚠️ 노드 없음: ${nodeId}`);
       return null;
     }
-
     if (!node) {
-      console.log(`  ⚠️ 노드 없음: ${nodeId}`);
       return null;
     }
 
-    // 페이지 바로 아래 최상위 프레임/섹션까지 올라가기
+    // 노드에서 PAGE까지 올라가면서 경로 수집
+    const ancestors: NodeAncestor[] = [];
     let current: BaseNode = node;
     while (current.parent && current.parent.type !== 'PAGE') {
       current = current.parent;
+      ancestors.unshift({
+        name: current.name,
+        id: current.id,
+        type: current.type
+      });
     }
 
-    console.log(`  ✅ ${nodeId} → 프레임: "${current.name}" (${current.id})`);
+    // 최상위 = ancestors[0], frameName은 최상위 이름 (기존 호환)
+    const topLevel = ancestors[0] || { name: node.name, id: node.id, type: node.type };
+
     return {
-      frameName: current.name,
-      frameId: current.id
+      frameName: topLevel.name,
+      frameId: topLevel.id,
+      hierarchy: ancestors
     };
   } catch (e) {
-    console.log(`  ❌ 에러: ${nodeId}`, e);
     return null;
   }
 }
@@ -208,47 +215,49 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       const comments = msg.comments || [];
       console.log(`✅ 코멘트 ${comments.length}개 조회 완료`);
 
-      // 1단계: 부모 코멘트의 node_id → 프레임 정보 맵 구축
-      const parentFrameMap: Record<string, { nodeId: string; frameName: string; frameId: string | null }> = {};
+      // 1단계: 부모 코멘트의 node_id → 프레임/계층 정보 맵 구축
+      const parentFrameMap: Record<string, { nodeId: string; frameName: string; frameId: string | null; hierarchy: NodeAncestor[] }> = {};
       comments.forEach((comment: any) => {
-        if (comment.parent_id) return; // 답글은 건너뜀
+        if (comment.parent_id) return;
         const nodeId = comment.client_meta?.node_id
           || comment.client_meta?.node_offset?.node_id
           || null;
         if (nodeId) {
-          const frameInfo = getNodeFrameInfo(nodeId);
+          const info = getNodeHierarchy(nodeId);
           parentFrameMap[comment.id] = {
             nodeId,
-            frameName: frameInfo?.frameName || '기타',
-            frameId: frameInfo?.frameId || null
+            frameName: info?.frameName || '기타',
+            frameId: info?.frameId || null,
+            hierarchy: info?.hierarchy || []
           };
         }
       });
 
       console.log(`🔍 부모 코멘트 ${Object.keys(parentFrameMap).length}개에서 프레임 매핑 완료`);
 
-      // 2단계: 모든 코멘트에 프레임 정보 추가 (답글은 부모 정보 상속)
+      // 2단계: 모든 코멘트에 프레임 + 계층 정보 추가 (답글은 부모 정보 상속)
       const enrichedComments = comments.map((comment: any) => {
-        // 직접 node_id가 있는 경우
         let nodeId = comment.client_meta?.node_id
           || comment.client_meta?.node_offset?.node_id
           || null;
         let frameName = '기타';
         let frameId = null;
+        let hierarchy: NodeAncestor[] = [];
 
         if (nodeId) {
-          const frameInfo = getNodeFrameInfo(nodeId);
-          frameName = frameInfo?.frameName || '기타';
-          frameId = frameInfo?.frameId || null;
+          const info = getNodeHierarchy(nodeId);
+          frameName = info?.frameName || '기타';
+          frameId = info?.frameId || null;
+          hierarchy = info?.hierarchy || [];
         } else if (comment.parent_id && parentFrameMap[comment.parent_id]) {
-          // 답글: 부모 코멘트의 프레임 정보 상속
           const parent = parentFrameMap[comment.parent_id];
           nodeId = parent.nodeId;
           frameName = parent.frameName;
           frameId = parent.frameId;
+          hierarchy = parent.hierarchy;
         }
 
-        return { ...comment, frameName, frameId, resolvedNodeId: nodeId };
+        return { ...comment, frameName, frameId, resolvedNodeId: nodeId, hierarchy };
       });
 
       // 체크 상태 로드
