@@ -559,6 +559,23 @@
       font-weight: 600;
       color: #555;
       border-bottom: 1px solid #e0e0e0;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .sub-group-header:hover {
+      background: #f5f5f5;
+    }
+
+    .sub-group-header .sub-arrow {
+      font-size: 9px;
+      transition: transform 0.2s;
+      color: #999;
+    }
+
+    .sub-group-header .sub-arrow.open {
+      transform: rotate(90deg);
     }
 
     .sub-group-header .sub-icon {
@@ -570,6 +587,15 @@
       font-weight: 400;
       font-size: 10px;
       color: #999;
+    }
+
+    .sub-items-container {
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .sub-items-container.sub-collapsed {
+      max-height: 0 !important;
     }
 
     /* ===== Accordion Toggle ===== */
@@ -1371,22 +1397,31 @@ JSON 형식으로만 응답:
 
         const hasMultipleSubs = subKeys.length > 1 || (subKeys.length === 1 && subKeys[0] !== '일반');
 
+        let subIdx = 0;
         subKeys.forEach(subPath => {
           const subComments = subGroups[subPath];
+          const subId = `${frameName}__sub${subIdx++}`;
 
           // 서브 그룹 헤더 (2개 이상 서브그룹이 있을 때만 표시)
           if (hasMultipleSubs && subPath !== '일반') {
-            html += `<div class="sub-group-header">
+            html += `<div class="sub-group-header" data-sub-id="${subId}">
+              <span class="sub-arrow open">▶</span>
               <span class="sub-icon">📂</span>
               <span>${subPath}</span>
               <span class="sub-count">${subComments.length}건</span>
             </div>`;
           } else if (hasMultipleSubs && subPath === '일반') {
-            html += `<div class="sub-group-header">
+            html += `<div class="sub-group-header" data-sub-id="${subId}">
+              <span class="sub-arrow open">▶</span>
               <span class="sub-icon">📎</span>
               <span>기타 코멘트</span>
               <span class="sub-count">${subComments.length}건</span>
             </div>`;
+          }
+
+          // 서브 그룹 코멘트 컨테이너
+          if (hasMultipleSubs) {
+            html += `<div class="sub-items-container" data-sub-items="${subId}">`;
           }
 
           // 우선순위 urgent 먼저, 그 다음 최신순
@@ -1415,6 +1450,10 @@ JSON 형식으로만 응답:
                 </div>
               </div>`;
           });
+
+          if (hasMultipleSubs) {
+            html += `</div>`; // sub-items-container
+          }
         });
 
         html += `</div>`; // comment-items-container
@@ -1449,6 +1488,34 @@ JSON 형식으로만 응답:
             arrow.classList.remove('open');
             const count = container.querySelectorAll('.comment-item').length;
             btn.innerHTML = `<span class="toggle-arrow">▶</span> 코멘트 ${count}건 보기`;
+          }
+        });
+      });
+
+      // 서브 그룹 토글
+      commentList.querySelectorAll('.sub-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const subId = header.getAttribute('data-sub-id');
+          const container = commentList.querySelector(`[data-sub-items="${subId}"]`);
+          const arrow = header.querySelector('.sub-arrow');
+          if (!container) return;
+
+          if (container.classList.contains('sub-collapsed')) {
+            container.classList.remove('sub-collapsed');
+            container.style.maxHeight = container.scrollHeight + 'px';
+            if (arrow) arrow.classList.add('open');
+          } else {
+            container.classList.add('sub-collapsed');
+            container.style.maxHeight = '0';
+            if (arrow) arrow.classList.remove('open');
+          }
+
+          // 부모 컨테이너의 maxHeight 재계산
+          const parentContainer = header.closest('.comment-items-container');
+          if (parentContainer && !parentContainer.classList.contains('collapsed')) {
+            setTimeout(() => {
+              parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
+            }, 350);
           }
         });
       });
