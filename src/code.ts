@@ -10,6 +10,7 @@ interface PluginMessage {
   range?: string;
   nodeId?: string;
   comments?: FigmaComment[];
+  allCommentsForLookup?: any[];
   error?: string;
   commentId?: string;
   checked?: boolean;
@@ -184,6 +185,11 @@ function zoomToNode(nodeId: string): void {
   if (node && 'x' in node) {
     figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
     figma.currentPage.selection = [node as SceneNode];
+  } else {
+    figma.ui.postMessage({
+      type: 'zoom-failed',
+      message: '해당 노드를 찾을 수 없습니다. 삭제되었거나 다른 페이지에 있을 수 있습니다.'
+    });
   }
 }
 
@@ -215,9 +221,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       const comments = msg.comments || [];
       console.log(`✅ 코멘트 ${comments.length}개 조회 완료`);
 
-      // 1단계: 부모 코멘트의 node_id → 프레임/계층 정보 맵 구축
+      // 1단계: 부모 코멘트의 node_id → 프레임/계층 정보 맵 구축 (전체 코멘트 사용)
+      const allComments = msg.allCommentsForLookup || comments;
       const parentFrameMap: Record<string, { nodeId: string; frameName: string; frameId: string | null; hierarchy: NodeAncestor[] }> = {};
-      comments.forEach((comment: any) => {
+      allComments.forEach((comment: any) => {
         if (comment.parent_id) return;
         const nodeId = comment.client_meta?.node_id
           || comment.client_meta?.node_offset?.node_id

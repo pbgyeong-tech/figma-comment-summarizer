@@ -903,6 +903,10 @@
           fetchComments(message.fileKey, message.figmaToken, message.range, message.lastCheckTime);
           break;
 
+        case 'zoom-failed':
+          showToast(message.message, 'error');
+          break;
+
         case 'fetch-error':
           // 에러 표시
           showToast(message.error, 'error');
@@ -985,11 +989,12 @@
 
         console.log(`🔍 전체 ${allComments.length}개 중 ${filteredComments.length}개 필터됨 (${range})`);
 
-        // code.ts에 결과 전달
+        // code.ts에 결과 전달 (allComments는 부모 코멘트 매핑용)
         parent.postMessage({
           pluginMessage: {
             type: 'comments-fetched',
-            comments: filteredComments
+            comments: filteredComments,
+            allCommentsForLookup: allComments
           }
         }, '*');
 
