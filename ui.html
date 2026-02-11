@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Figma Plugin</title>
+  <title>Comment Summarizer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -12,29 +14,342 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 12px;
       color: #333;
       background-color: #fff;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background-color: #fafafa;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(135deg, #18a0fb 0%, #0d8de5 100%);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .logo-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .date-picker {
+      position: relative;
+    }
+
+    .date-select {
+      padding: 6px 28px 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      background-color: #fff;
+      color: #333;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    .date-select:focus {
+      outline: none;
+      border-color: #18a0fb;
+    }
+
+    /* ===== Tabs ===== */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #e5e5e5;
+      background-color: #fff;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #666;
+      background: none;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .tab:hover {
+      color: #333;
+    }
+
+    .tab.active {
+      color: #18a0fb;
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background-color: #18a0fb;
+    }
+
+    .tab-count {
+      display: inline-block;
+      margin-left: 4px;
+      padding: 2px 6px;
+      background-color: #f0f0f0;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .tab.active .tab-count {
+      background-color: #e3f2fd;
+      color: #18a0fb;
+    }
+
+    /* ===== Content Area ===== */
+    .content {
+      flex: 1;
+      overflow-y: auto;
       padding: 16px;
     }
 
-    .container {
+    .empty-state {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #999;
+      text-align: center;
     }
 
-    h1 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1a1a1a;
+    .empty-icon {
+      width: 48px;
+      height: 48px;
+      background-color: #f5f5f5;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .empty-icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: #ccc;
+    }
+
+    .empty-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: #666;
       margin-bottom: 4px;
     }
 
-    p {
+    .empty-desc {
+      font-size: 11px;
+      color: #999;
+    }
+
+    /* ===== Comment List (placeholder) ===== */
+    .comment-list {
+      display: none;
+    }
+
+    .comment-group {
+      margin-bottom: 16px;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .group-icon {
+      font-size: 14px;
+    }
+
+    .comment-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background-color: #fafafa;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .comment-item:hover {
+      background-color: #f0f0f0;
+    }
+
+    .comment-checkbox {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      accent-color: #18a0fb;
+    }
+
+    .comment-content {
+      flex: 1;
+    }
+
+    .comment-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .tag-bug {
+      background-color: #ffebee;
+      color: #e53935;
+    }
+
+    .tag-change {
+      background-color: #fff3e0;
+      color: #fb8c00;
+    }
+
+    .tag-question {
+      background-color: #e3f2fd;
+      color: #1e88e5;
+    }
+
+    .tag-feedback {
+      background-color: #f5f5f5;
+      color: #757575;
+    }
+
+    .comment-summary {
+      font-size: 12px;
+      color: #333;
+      line-height: 1.4;
+    }
+
+    .comment-meta {
+      font-size: 10px;
+      color: #999;
+      margin-top: 4px;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e5e5;
+      background-color: #fafafa;
+    }
+
+    .btn-settings {
+      width: 100%;
+      padding: 10px 16px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background-color: #fff;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
       color: #666;
-      line-height: 1.5;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-settings:hover {
+      border-color: #18a0fb;
+      color: #18a0fb;
+    }
+
+    .btn-settings svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ===== Modal (API Settings) ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.4);
+      z-index: 100;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      background-color: #fff;
+      border-radius: 8px;
+      width: 280px;
+      max-width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-header {
+      padding: 16px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .modal-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .modal-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
 
     .input-group {
@@ -43,39 +358,39 @@
       gap: 6px;
     }
 
-    label {
+    .input-group label {
+      font-size: 11px;
       font-weight: 500;
-      color: #444;
+      color: #666;
     }
 
-    input[type="text"],
-    input[type="number"] {
-      width: 100%;
+    .input-group input {
       padding: 8px 10px;
       border: 1px solid #ddd;
       border-radius: 6px;
-      font-size: 12px;
-      outline: none;
-      transition: border-color 0.2s;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
     }
 
-    input:focus {
+    .input-group input:focus {
+      outline: none;
       border-color: #18a0fb;
     }
 
-    .button-group {
+    .modal-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e5e5;
       display: flex;
       gap: 8px;
-      margin-top: 8px;
     }
 
-    button {
+    .btn {
       flex: 1;
-      padding: 10px 16px;
-      border: none;
+      padding: 8px 12px;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
+      font-family: 'Inter', sans-serif;
       cursor: pointer;
       transition: all 0.2s;
     }
@@ -83,6 +398,7 @@
     .btn-primary {
       background-color: #18a0fb;
       color: white;
+      border: none;
     }
 
     .btn-primary:hover {
@@ -90,76 +406,1054 @@
     }
 
     .btn-secondary {
-      background-color: #f0f0f0;
-      color: #333;
+      background-color: #fff;
+      color: #666;
+      border: 1px solid #ddd;
     }
 
     .btn-secondary:hover {
-      background-color: #e0e0e0;
-    }
-
-    .message {
-      padding: 10px;
-      border-radius: 6px;
       background-color: #f5f5f5;
-      color: #666;
-      text-align: center;
-      display: none;
     }
 
-    .message.show {
-      display: block;
+    /* ===== Toast Notification ===== */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .toast.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.success {
+      background-color: #4caf50;
+    }
+
+    .toast.error {
+      background-color: #e53935;
+    }
+
+    /* ===== Settings Status Badge ===== */
+    .settings-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .settings-status.configured {
+      background-color: #e8f5e9;
+      color: #4caf50;
+    }
+
+    .settings-status.not-configured {
+      background-color: #fff3e0;
+      color: #fb8c00;
+    }
+
+    /* ===== Password Toggle ===== */
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      padding-right: 36px;
+    }
+
+    .toggle-visibility {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: #999;
+      font-size: 14px;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    .toggle-visibility:hover {
+      color: #333;
+    }
+
+    /* ===== Spinner Animation ===== */
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spinner {
+      animation: spin 1s linear infinite;
+    }
+
+    /* ===== Smart Summary Card ===== */
+    .summary-card {
+      background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
+      border: 1px solid #d2e3fc;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin: 6px 12px 4px;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .summary-card-title {
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 6px;
+      color: #1a73e8;
+    }
+
+    .summary-card-section {
+      margin: 3px 0;
+      color: #333;
+    }
+
+    .summary-card-section .section-icon {
+      margin-right: 4px;
+    }
+
+    .summary-card-loading {
+      color: #999;
+      font-style: italic;
+      padding: 8px 12px;
+      font-size: 11px;
+    }
+
+    /* ===== Accordion Toggle ===== */
+    .group-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 11px;
+      color: #666;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      transition: color 0.2s;
+    }
+
+    .group-toggle:hover {
+      color: #333;
+    }
+
+    .group-toggle .toggle-arrow {
+      transition: transform 0.2s;
+      font-size: 10px;
+    }
+
+    .group-toggle .toggle-arrow.open {
+      transform: rotate(90deg);
+    }
+
+    .comment-items-container {
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .comment-items-container.collapsed {
+      max-height: 0 !important;
     }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <div>
-      <h1>My Figma Plugin</h1>
-      <p>Figma 플러그인에 오신 것을 환영합니다.</p>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">💬</div>
+      <span class="logo-text">Comment Summarizer</span>
+    </div>
+    <div class="date-picker">
+      <select class="date-select" id="dateRange">
+        <option value="24h">최근 24시간</option>
+        <option value="3d">최근 3일</option>
+        <option value="1w">최근 1주일</option>
+        <option value="last">마지막 방문 이후</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tabAll">
+      전체 보기 <span class="tab-count">0</span>
+    </button>
+    <button class="tab" id="tabPending">
+      미완료만 <span class="tab-count">0</span>
+    </button>
+  </div>
+
+  <!-- Content -->
+  <main class="content">
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </div>
+      <p class="empty-title">코멘트가 없습니다</p>
+      <p class="empty-desc">기간을 선택하고 API 키를 설정해주세요</p>
     </div>
 
-    <div class="input-group">
-      <label for="count">생성할 사각형 개수</label>
-      <input type="number" id="count" value="5" min="1" max="20">
+    <!-- Comment List (will be populated by JS) -->
+    <div class="comment-list" id="commentList">
+      <!-- Example structure for reference:
+      <div class="comment-group">
+        <div class="group-header">
+          <span class="group-icon">📁</span>
+          <span>Home 화면</span>
+        </div>
+        <div class="comment-item">
+          <input type="checkbox" class="comment-checkbox">
+          <div class="comment-content">
+            <span class="comment-tag tag-change">수정 요청</span>
+            <p class="comment-summary">로고 크기를 20% 줄여주세요</p>
+            <p class="comment-meta">@designer_kim · 2시간 전</p>
+          </div>
+        </div>
+      </div>
+      -->
     </div>
+  </main>
 
-    <div class="button-group">
-      <button class="btn-primary" id="create">생성하기</button>
-      <button class="btn-secondary" id="cancel">닫기</button>
+  <!-- Footer -->
+  <footer class="footer">
+    <button class="btn-settings" id="openSettings">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+        </path>
+      </svg>
+      API 키 설정
+      <span class="settings-status not-configured" id="settingsStatus">미설정</span>
+    </button>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Modal: API Settings -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">API 키 설정</h2>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <label for="figmaFileUrl">Figma 파일 URL <span style="font-weight:400;color:#999;">(브라우저 주소창에서
+              복사)</span></label>
+          <div class="input-wrapper">
+            <input type="text" id="figmaFileUrl" placeholder="https://www.figma.com/design/ABC123.../...">
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="figmaToken">Figma Personal Access Token</label>
+          <div class="input-wrapper">
+            <input type="password" id="figmaToken" placeholder="figd_xxx...">
+            <button type="button" class="toggle-visibility" data-target="figmaToken" title="비밀번호 보기">👁</button>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="geminiKey">Gemini API Key</label>
+          <div class="input-wrapper">
+            <input type="password" id="geminiKey" placeholder="AIza... (Google AI Studio에서 무료 발급 가능)">
+            <button type="button" class="toggle-visibility" data-target="geminiKey" title="비밀번호 보기">👁</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelSettings">취소</button>
+        <button class="btn btn-primary" id="saveSettings">저장</button>
+      </div>
     </div>
-
-    <div class="message" id="message"></div>
   </div>
 
   <script>
-    const countInput = document.getElementById('count');
-    const createBtn = document.getElementById('create');
-    const cancelBtn = document.getElementById('cancel');
-    const messageEl = document.getElementById('message');
+    // DOM Elements
+    const dateRangeSelect = document.getElementById('dateRange');
+    const tabAll = document.getElementById('tabAll');
+    const tabPending = document.getElementById('tabPending');
+    const emptyState = document.getElementById('emptyState');
+    const commentList = document.getElementById('commentList');
+    const openSettingsBtn = document.getElementById('openSettings');
+    const settingsModal = document.getElementById('settingsModal');
+    const cancelSettingsBtn = document.getElementById('cancelSettings');
+    const saveSettingsBtn = document.getElementById('saveSettings');
+    const figmaTokenInput = document.getElementById('figmaToken');
+    const geminiKeyInput = document.getElementById('geminiKey');
+    const figmaFileUrlInput = document.getElementById('figmaFileUrl');
+    const toast = document.getElementById('toast');
+    const settingsStatus = document.getElementById('settingsStatus');
+    const toggleButtons = document.querySelectorAll('.toggle-visibility');
 
-    // 사각형 생성 버튼 클릭
-    createBtn.addEventListener('click', () => {
-      const count = parseInt(countInput.value, 10) || 5;
-      parent.postMessage({ pluginMessage: { type: 'create-rectangles', count } }, '*');
+    // Toast 알림 표시 함수
+    function showToast(message, type = 'default') {
+      toast.textContent = message;
+      toast.className = 'toast show ' + type;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    // 설정 상태 업데이트 함수
+    function updateSettingsStatus(hasSettings) {
+      if (hasSettings) {
+        settingsStatus.textContent = '설정됨 ✓';
+        settingsStatus.className = 'settings-status configured';
+      } else {
+        settingsStatus.textContent = '미설정';
+        settingsStatus.className = 'settings-status not-configured';
+      }
+    }
+
+    // Figma URL에서 fileKey 추출
+    // 지원 형식: /file/{key}/..., /design/{key}/..., /board/{key}/...
+    function extractFileKeyFromUrl(url) {
+      const match = url.match(/figma\.com\/(file|design|board)\/([a-zA-Z0-9]+)/);
+      return match ? match[2] : null;
+    }
+
+    // Tab switching
+    let currentFilter = 'all'; // 'all' | 'pending'
+    let allClassifiedComments = []; // 분류된 코멘트 전체 저장
+    let currentCheckedStates = {}; // 체크 상태
+    let frameSummaries = {}; // 프레임별 AI 요약 카드 데이터
+
+    tabAll.addEventListener('click', () => {
+      tabAll.classList.add('active');
+      tabPending.classList.remove('active');
+      currentFilter = 'all';
+      applyFilter();
     });
 
-    // 닫기 버튼 클릭
-    cancelBtn.addEventListener('click', () => {
-      parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+    tabPending.addEventListener('click', () => {
+      tabPending.classList.add('active');
+      tabAll.classList.remove('active');
+      currentFilter = 'pending';
+      applyFilter();
     });
 
-    // 플러그인 코드에서 메시지 수신
+    // Date range change
+    dateRangeSelect.addEventListener('change', (e) => {
+      const range = e.target.value;
+      parent.postMessage({ pluginMessage: { type: 'date-range-changed', range } }, '*');
+    });
+
+    // Password visibility toggle
+    toggleButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.textContent = '🙈';
+          btn.title = '비밀번호 숨기기';
+        } else {
+          input.type = 'password';
+          btn.textContent = '👁';
+          btn.title = '비밀번호 보기';
+        }
+      });
+    });
+
+    // Settings modal
+    openSettingsBtn.addEventListener('click', () => {
+      settingsModal.classList.add('show');
+    });
+
+    cancelSettingsBtn.addEventListener('click', () => {
+      settingsModal.classList.remove('show');
+    });
+
+    saveSettingsBtn.addEventListener('click', () => {
+      const figmaToken = figmaTokenInput.value.trim();
+      const geminiKey = geminiKeyInput.value.trim();
+      const fileUrl = figmaFileUrlInput.value.trim();
+
+      // Figma URL에서 fileKey 추출
+      if (fileUrl) {
+        const extractedKey = extractFileKeyFromUrl(fileUrl);
+        if (extractedKey) {
+          parent.postMessage({
+            pluginMessage: { type: 'save-file-key', fileKey: extractedKey }
+          }, '*');
+          window.fileKey = extractedKey;
+        } else {
+          showToast('Figma URL 형식이 올바르지 않습니다.', 'error');
+          return;
+        }
+      }
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'save-api-keys',
+          figmaToken,
+          geminiKey
+        }
+      }, '*');
+      settingsModal.classList.remove('show');
+    });
+
+    // Close modal when clicking overlay
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        settingsModal.classList.remove('show');
+      }
+    });
+
+    // Receive messages from plugin code
     window.onmessage = (event) => {
       const message = event.data.pluginMessage;
-      if (message && message.type === 'result') {
-        messageEl.textContent = message.text;
-        messageEl.classList.add('show');
-        setTimeout(() => {
-          messageEl.classList.remove('show');
-        }, 3000);
+      if (!message) return;
+
+      switch (message.type) {
+        case 'load-settings':
+          // Pre-fill saved API keys
+          if (message.figmaToken) figmaTokenInput.value = message.figmaToken;
+          if (message.geminiKey) geminiKeyInput.value = message.geminiKey;
+          // 설정 상태 업데이트
+          updateSettingsStatus(message.hasSettings);
+          break;
+
+        case 'settings-saved':
+          // 저장 결과 Toast 표시
+          showToast(message.message, message.success ? 'success' : 'error');
+          if (message.success) {
+            updateSettingsStatus(true);
+          }
+          break;
+
+        case 'file-info':
+          // 파일 정보 저장
+          window.fileKey = message.fileKey;
+          window.fileName = message.fileName;
+          console.log('📁 파일 정보:', message.fileName, message.fileKey);
+          // fileKey가 없으면 설정 모달 자동 오픈
+          if (!message.fileKey) {
+            console.log('⚠️ fileKey가 없습니다. 설정에서 Figma 파일 URL을 입력해주세요.');
+          }
+          break;
+
+        case 'file-key-saved':
+          window.fileKey = message.fileKey;
+          showToast('파일 키 저장 완료!', 'success');
+          break;
+
+        case 'fetch-comments-request':
+          // code.ts에서 요청이 오면 실제 API 호출 수행
+          fetchComments(message.fileKey, message.figmaToken, message.range, message.lastCheckTime);
+          break;
+
+        case 'fetch-error':
+          // 에러 표시
+          showToast(message.error, 'error');
+          updateEmptyState('error', message.error);
+          break;
+
+        case 'comments-loaded':
+          console.log(`📋 UI에서 ${message.count}개 코멘트 수신`);
+          currentCheckedStates = message.checkedStates || {};
+          if (message.count === 0) {
+            updateEmptyState('empty', '해당 기간에 코멘트가 없습니다');
+          } else {
+            classifyAndRenderComments(message.comments);
+          }
+          break;
       }
     };
+
+    // ===== Phase 1-2: Figma REST API 코멘트 조회 =====
+
+    // 기간 필터 계산 함수
+    function getDateFilter(range, lastCheckTime) {
+      const now = new Date();
+      let sinceDate;
+
+      switch (range) {
+        case '24h':
+          sinceDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '3d':
+          sinceDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          break;
+        case '1w':
+          sinceDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'last':
+          sinceDate = lastCheckTime ? new Date(lastCheckTime) : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        default:
+          sinceDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
+
+      return sinceDate.toISOString();
+    }
+
+    // 코멘트 조회 함수
+    async function fetchComments(fileKey, figmaToken, range, lastCheckTime) {
+      // 로딩 상태 표시
+      updateEmptyState('loading', '코멘트를 불러오는 중...');
+
+      try {
+        const response = await fetch(
+          `https://api.figma.com/v1/files/${fileKey}/comments`,
+          {
+            method: 'GET',
+            headers: {
+              'X-Figma-Token': figmaToken
+            }
+          }
+        );
+
+        if (!response.ok) {
+          let errorMessage = '코멘트를 가져오는데 실패했습니다.';
+          if (response.status === 403) {
+            errorMessage = 'API 토큰이 유효하지 않습니다. 다시 설정해주세요.';
+          } else if (response.status === 404) {
+            errorMessage = '파일을 찾을 수 없습니다.';
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const allComments = data.comments || [];
+
+        // 기간 필터링
+        const sinceDate = getDateFilter(range, lastCheckTime);
+        const filteredComments = allComments.filter(comment => {
+          return new Date(comment.created_at) >= new Date(sinceDate);
+        });
+
+        console.log(`🔍 전체 ${allComments.length}개 중 ${filteredComments.length}개 필터됨 (${range})`);
+
+        // code.ts에 결과 전달
+        parent.postMessage({
+          pluginMessage: {
+            type: 'comments-fetched',
+            comments: filteredComments
+          }
+        }, '*');
+
+        // 로딩 완료 Toast
+        showToast(`${filteredComments.length}개 코멘트 로드 완료`, 'success');
+
+      } catch (error) {
+        console.error('❌ 코멘트 조회 실패:', error);
+        parent.postMessage({
+          pluginMessage: {
+            type: 'comments-fetch-error',
+            error: error.message
+          }
+        }, '*');
+      }
+    }
+
+    // Empty State 업데이트 함수
+    function updateEmptyState(state, message) {
+      const emptyIcon = emptyState.querySelector('.empty-icon');
+      const emptyTitle = emptyState.querySelector('.empty-title');
+      const emptyDesc = emptyState.querySelector('.empty-desc');
+
+      switch (state) {
+        case 'loading':
+          emptyIcon.innerHTML = `
+            <svg class="spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 11-6.219-8.56"></path>
+            </svg>
+          `;
+          emptyTitle.textContent = message || '로딩 중...';
+          emptyDesc.textContent = '';
+          break;
+        case 'error':
+          emptyIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          `;
+          emptyTitle.textContent = '오류 발생';
+          emptyDesc.textContent = message || '';
+          break;
+        case 'empty':
+          emptyIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          `;
+          emptyTitle.textContent = message || '코멘트가 없습니다';
+          emptyDesc.textContent = '기간을 변경해보세요';
+          break;
+        default:
+          emptyIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          `;
+          emptyTitle.textContent = '코멘트가 없습니다';
+          emptyDesc.textContent = '기간을 선택하고 API 키를 설정해주세요';
+      }
+    }
+
+    // ===== Gemini API 통신 함수 (429 자동 재시도 포함) =====
+
+    async function callGeminiAPI(geminiKey, promptText, maxRetries = 3) {
+      const GEMINI_MODEL = 'gemini-2.0-flash';
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 4096,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!resultText) throw new Error('Gemini 응답에서 결과를 찾을 수 없습니다.');
+          return JSON.parse(resultText);
+        }
+
+        if (response.status === 429 && attempt < maxRetries) {
+          const backoffSec = 5 * Math.pow(2, attempt); // 5초, 10초, 20초
+          console.warn(`⏳ 429 Rate Limit → ${backoffSec}초 후 재시도 (${attempt + 1}/${maxRetries})`);
+          await sleep(backoffSec * 1000);
+          continue;
+        }
+
+        let errorMessage = 'Gemini API 호출에 실패했습니다.';
+        if (response.status === 400) errorMessage = 'Gemini API 키가 유효하지 않습니다.';
+        else if (response.status === 429) errorMessage = `API 호출 한도 초과. ${maxRetries}회 재시도 실패.`;
+        throw new Error(errorMessage);
+      }
+    }
+
+    // ===== One-Shot 프레임별 통합 처리 (분류 + 요약) =====
+
+    const FRAME_DELAY_MS = 1000; // 프레임 간 1초 딜레이
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    async function classifyAndRenderComments(comments) {
+      const geminiKey = geminiKeyInput.value.trim();
+
+      // API 키 없으면 분류 없이 바로 렌더링
+      if (!geminiKey) {
+        allClassifiedComments = comments.map(comment => ({
+          ...comment,
+          category: 'discussion',
+          priority: 'normal',
+          summary: comment.message.substring(0, 30),
+          checked: currentCheckedStates[comment.id] || false
+        }));
+        renderCommentList(allClassifiedComments);
+        showToast('Gemini API 키가 없어 분류 없이 표시합니다.', 'error');
+        return;
+      }
+
+      // 1단계: 로컬 프레임별 그룹핑 (API 호출 전)
+      const groups = {};
+      comments.forEach(c => {
+        const key = c.frameName || '기타';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(c);
+      });
+
+      const frameNames = Object.keys(groups);
+      console.log(`🚀 ${frameNames.length}개 프레임 통합 처리 시작 (분류+요약 동시)`);
+
+      // 먼저 기본값으로 전체 렌더링 (로딩 상태 표시)
+      allClassifiedComments = comments.map(comment => ({
+        ...comment,
+        category: 'discussion',
+        priority: 'normal',
+        summary: comment.message.substring(0, 30),
+        checked: currentCheckedStates[comment.id] || false
+      }));
+      frameSummaries = {};
+      renderCommentList(allClassifiedComments);
+      updateEmptyState('loading', `AI 분석 중... (0/${frameNames.length} 프레임)`);
+
+      // 2단계: 프레임별 One-Shot API 호출
+      let failedFrames = 0;
+
+      for (let i = 0; i < frameNames.length; i++) {
+        const frameName = frameNames[i];
+        const frameComments = groups[frameName];
+
+        updateEmptyState('loading', `AI 분석 중... (${i + 1}/${frameNames.length} 프레임: ${frameName})`);
+
+        // 코멘트 1개면 API 호출 불필요
+        if (frameComments.length < 2) {
+          const c = frameComments[0];
+          // 분류: 기본값 유지
+          frameSummaries[frameName] = {
+            summary: {
+              title: c.message.substring(0, 15),
+              status: 'Open',
+              issues: [],
+              decisions: []
+            },
+            classifiedComments: [{
+              id: c.id,
+              category: 'discussion',
+              priority: 'normal',
+              summary: c.message.substring(0, 20)
+            }]
+          };
+          applyFrameResult(frameName, frameSummaries[frameName], frameComments);
+          updateSummaryCard(frameName);
+          continue;
+        }
+
+        try {
+          const prompt = buildOneShotPrompt(frameName, frameComments);
+          const result = await callGeminiAPI(geminiKey, prompt);
+          frameSummaries[frameName] = result;
+          applyFrameResult(frameName, result, frameComments);
+          updateSummaryCard(frameName);
+          console.log(`  ✅ "${frameName}" 완료 (${frameComments.length}개 코멘트)`);
+        } catch (error) {
+          console.warn(`  ⚠️ "${frameName}" 실패:`, error.message);
+          failedFrames++;
+          frameSummaries[frameName] = {
+            summary: { title: '분석 실패', status: 'Error', issues: [], decisions: [] },
+            classifiedComments: []
+          };
+          updateSummaryCard(frameName);
+        }
+
+        // 마지막 프레임이 아니면 딜레이
+        if (i < frameNames.length - 1) {
+          await sleep(FRAME_DELAY_MS);
+        }
+      }
+
+      // 최종 렌더링
+      renderCommentList(allClassifiedComments);
+
+      const successFrames = frameNames.length - failedFrames;
+      if (failedFrames === 0) {
+        showToast(`${frameNames.length}개 프레임 분석 완료`, 'success');
+      } else {
+        showToast(`${successFrames}/${frameNames.length} 프레임 성공, ${failedFrames}개 실패`, 'error');
+      }
+    }
+
+    // 프레임 결과를 allClassifiedComments에 반영
+    function applyFrameResult(frameName, result, frameComments) {
+      const classified = result.classifiedComments || [];
+      frameComments.forEach(comment => {
+        const match = classified.find(c => c.id === comment.id);
+        if (match) {
+          const idx = allClassifiedComments.findIndex(c => c.id === comment.id);
+          if (idx !== -1) {
+            allClassifiedComments[idx].category = match.category || 'discussion';
+            allClassifiedComments[idx].priority = match.priority || 'normal';
+            allClassifiedComments[idx].summary = match.summary || comment.message.substring(0, 20);
+          }
+        }
+      });
+    }
+
+    function buildOneShotPrompt(frameName, comments) {
+      const commentList = comments.map(c =>
+        `{"id":"${c.id}","user":"${c.user?.handle || 'unknown'}","msg":"${c.message.replace(/"/g, '\\"').replace(/\n/g, ' ').substring(0, 300)}"}`
+      ).join(',\n');
+
+      return `아래는 Figma 프레임 "${frameName}"에 달린 코멘트 대화입니다.
+두 가지를 동시에 분석해주세요:
+
+[코멘트 목록]
+[${commentList}]
+
+=== 분석 요청 ===
+1) summary: 이 프레임의 대화를 한국어로 요약
+2) classifiedComments: 각 코멘트를 분류
+
+JSON 형식으로만 응답:
+{
+  "summary": {
+    "title": "핵심 주제 15자이내",
+    "status": "Open 또는 Resolved",
+    "issues": ["주요 이슈 (한국어)"],
+    "decisions": ["결정/할 일 (한국어)"]
+  },
+  "classifiedComments": [
+    {"id":"원본id","category":"bug|change_request|question|discussion","priority":"urgent|normal","summary":"한국어 한줄요약 20자이내"}
+  ]
+}`;
+    }
+
+    function updateSummaryCard(frameName) {
+      const card = document.querySelector(`.summary-card[data-frame="${CSS.escape(frameName)}"]`);
+      if (!card) return;
+      const data = frameSummaries[frameName]?.summary;
+      if (!data) return;
+
+      const statusColor = data.status === 'Resolved' ? '#4caf50' : '#fb8c00';
+      const statusLabel = data.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
+
+      let html = `<div class="summary-card-title">💡 ${data.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
+      if (data.issues?.length) html += data.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
+      if (data.decisions?.length) html += data.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
+
+      card.innerHTML = html;
+    }
+
+    // ===== Phase 1-4: UI 렌더링 =====
+
+    const CATEGORY_MAP = {
+      bug: { label: '버그', cssClass: 'tag-bug', icon: '🔴' },
+      change_request: { label: '수정 요청', cssClass: 'tag-change', icon: '🟠' },
+      question: { label: '질문', cssClass: 'tag-question', icon: '🔵' },
+      discussion: { label: '논의', cssClass: 'tag-feedback', icon: '⚪' }
+    };
+
+    function renderCommentList(comments) {
+      // 필터 적용
+      let filtered = comments;
+      if (currentFilter === 'pending') {
+        filtered = comments.filter(c => !c.checked);
+      }
+
+      // 프레임별 그룹핑
+      const groups = {};
+      filtered.forEach(comment => {
+        const key = comment.frameName || '기타';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(comment);
+      });
+
+      // 코멘트 수 기준 내림차순 정렬
+      const sortedKeys = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
+
+      if (sortedKeys.length === 0) {
+        emptyState.style.display = 'flex';
+        commentList.style.display = 'none';
+        updateEmptyState('empty', currentFilter === 'pending' ? '미완료 코멘트가 없습니다' : '해당 기간에 코멘트가 없습니다');
+        updateTabCounts(comments);
+        return;
+      }
+
+      let html = '';
+      sortedKeys.forEach(frameName => {
+        const groupComments = groups[frameName];
+
+        // 그룹 헤더
+        const categoryCounts = {};
+        groupComments.forEach(c => {
+          categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+        });
+        const categoryBadges = Object.entries(categoryCounts)
+          .map(([cat, count]) => `${CATEGORY_MAP[cat]?.icon || '⚪'} ${count}`)
+          .join(' ');
+
+        html += `<div class="comment-group">`;
+        html += `<div class="group-header">
+          <span class="group-icon">📁</span>
+          <span>${frameName}</span>
+          <span style="margin-left:auto; font-size:10px; color:#999; font-weight:400;">${categoryBadges}</span>
+        </div>`;
+
+        // AI 요약 카드 (로딩 또는 데이터)
+        const frameData = frameSummaries[frameName];
+        const summary = frameData?.summary;
+        if (summary) {
+          const statusColor = summary.status === 'Resolved' ? '#4caf50' : '#fb8c00';
+          const statusLabel = summary.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
+          html += `<div class="summary-card" data-frame="${frameName}">`;
+          html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
+          if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
+          if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
+          html += `</div>`;
+        } else {
+          html += `<div class="summary-card" data-frame="${frameName}"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
+        }
+
+        // 아코디언 토글
+        html += `<button class="group-toggle" data-frame="${frameName}">
+          <span class="toggle-arrow">▶</span> 코멘트 ${groupComments.length}건 보기
+        </button>`;
+
+        // 코멘트 목록 (기본 접힌 상태)
+        html += `<div class="comment-items-container collapsed" data-frame-items="${frameName}">`;
+
+        // 우선순위 urgent 먼저, 그 다음 최신순
+        const sorted = [...groupComments].sort((a, b) => {
+          if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+          if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+
+        sorted.forEach(comment => {
+          const cat = CATEGORY_MAP[comment.category] || CATEGORY_MAP.discussion;
+          const urgentBadge = comment.priority === 'urgent'
+            ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
+            : '';
+          const nodeId = comment.resolvedNodeId || comment.client_meta?.node_id || '';
+          const checkedAttr = comment.checked ? 'checked' : '';
+          const checkedStyle = comment.checked ? 'opacity: 0.5;' : '';
+
+          html += `
+            <div class="comment-item" data-node-id="${nodeId}" data-comment-id="${comment.id}" style="${checkedStyle}">
+              <input type="checkbox" class="comment-checkbox" data-id="${comment.id}" ${checkedAttr}>
+              <div class="comment-content">
+                <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
+                <p class="comment-summary">${comment.summary || comment.message.substring(0, 30)}</p>
+                <p class="comment-meta">@${comment.user?.handle || 'unknown'} · ${formatRelativeTime(comment.created_at)}</p>
+              </div>
+            </div>`;
+        });
+
+        html += `</div>`; // comment-items-container
+        html += `</div>`; // comment-group
+      });
+
+      commentList.innerHTML = html;
+      emptyState.style.display = 'none';
+      commentList.style.display = 'block';
+
+      updateTabCounts(comments);
+      attachCommentEvents();
+    }
+
+    function attachCommentEvents() {
+      // 아코디언 토글
+      commentList.querySelectorAll('.group-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const frameName = btn.getAttribute('data-frame');
+          const container = commentList.querySelector(`[data-frame-items="${frameName}"]`);
+          const arrow = btn.querySelector('.toggle-arrow');
+          if (!container) return;
+
+          if (container.classList.contains('collapsed')) {
+            container.classList.remove('collapsed');
+            container.style.maxHeight = container.scrollHeight + 'px';
+            arrow.classList.add('open');
+            btn.innerHTML = `<span class="toggle-arrow open">▶</span> 코멘트 접기`;
+          } else {
+            container.classList.add('collapsed');
+            container.style.maxHeight = '0';
+            arrow.classList.remove('open');
+            const count = container.querySelectorAll('.comment-item').length;
+            btn.innerHTML = `<span class="toggle-arrow">▶</span> 코멘트 ${count}건 보기`;
+          }
+        });
+      });
+
+      // 체크박스 이벤트
+      commentList.querySelectorAll('.comment-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const commentId = e.target.getAttribute('data-id');
+          const checked = e.target.checked;
+
+          // UI 상태 업데이트
+          const item = e.target.closest('.comment-item');
+          item.style.opacity = checked ? '0.5' : '1';
+
+          // 데이터 업데이트
+          currentCheckedStates[commentId] = checked;
+          const comment = allClassifiedComments.find(c => c.id === commentId);
+          if (comment) comment.checked = checked;
+
+          // code.ts에 저장 요청
+          parent.postMessage({
+            pluginMessage: { type: 'save-check-state', commentId, checked }
+          }, '*');
+
+          updateTabCounts(allClassifiedComments);
+
+          // 미완료 필터 중이면 완료된 항목 제거
+          if (currentFilter === 'pending' && checked) {
+            setTimeout(() => renderCommentList(allClassifiedComments), 300);
+          }
+        });
+      });
+
+      // 코멘트 클릭 → 딥링크
+      commentList.querySelectorAll('.comment-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.type === 'checkbox') return; // 체크박스 클릭은 제외
+          const nodeId = item.getAttribute('data-node-id');
+          if (nodeId) {
+            parent.postMessage({
+              pluginMessage: { type: 'zoom-to-node', nodeId }
+            }, '*');
+          }
+        });
+      });
+    }
+
+    function formatRelativeTime(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1) return '방금';
+      if (minutes < 60) return `${minutes}분 전`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}시간 전`;
+      const days = Math.floor(hours / 24);
+      if (days < 7) return `${days}일 전`;
+      return new Date(dateStr).toLocaleDateString('ko-KR');
+    }
+
+    function updateTabCounts(comments) {
+      const total = comments.length;
+      const pending = comments.filter(c => !c.checked).length;
+      tabAll.querySelector('.tab-count').textContent = total;
+      tabPending.querySelector('.tab-count').textContent = pending;
+    }
+
+    function applyFilter() {
+      if (allClassifiedComments.length > 0) {
+        renderCommentList(allClassifiedComments);
+      }
+    }
   </script>
 </body>
+
 </html>

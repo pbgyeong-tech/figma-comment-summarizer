@@ -1,80 +1,143 @@
-# My Figma Plugin
+# Figma Comment Summarizer
 
-TypeScript 기반 Figma 플러그인 보일러플레이트입니다.
+> 글로벌 프로젝트의 **코멘트 지옥**을 정리하고, 중요한 피드백을 놓치지 않게 도와주는 Figma 플러그인
 
-## 프로젝트 구조
+---
+
+## 🎯 프로젝트 개요
+
+### 문제 정의
+글로벌 협업 프로젝트에서는 수십~수백 개의 코멘트가 쌓이며, 시간순으로 나열된 코멘트 중 **중요한 수정 사항을 놓치기 쉽습니다**.
+
+### 솔루션
+AI 기반 스마트 요약으로 코멘트를 **액션 가능한(Actionable) 정보**로 변환합니다.
+
+- ✅ 버그, 수정 요청, 질문 등 **자동 분류**
+- ✅ 시간순이 아닌 **화면(프레임) 단위로 그룹핑**
+- ✅ 클릭 한 번으로 **해당 코멘트 위치로 이동**
+- ✅ 처리 완료한 항목은 **체크박스로 관리**
+
+---
+
+## ✨ 핵심 기능
+
+### 1. 기간 설정 (Date Range Picker)
+
+| 옵션 | 설명 |
+|------|------|
+| 최근 24시간 | 기본값 |
+| 최근 1주일 | 장기간 코멘트 확인 |
+| 마지막 방문 이후 | 이전 플러그인 실행 시점 기준 |
+
+---
+
+### 2. AI 스마트 요약
+
+코멘트를 분석하여 자동으로 태깅 분류합니다.
+
+| 태그 | 색상 | 설명 |
+|------|------|------|
+| 🔴 **Bug** | 빨강 | 버그 리포트, 오류 제보 |
+| 🟠 **Change Request** | 주황 | 수정 요청, 변경 사항 |
+| 🔵 **Question** | 파랑 | 질문, 확인 요청 |
+| ⚪ **Feedback** | 회색 | 단순 피드백, 일반 의견 |
+
+**긴급 표시**: `긴급`, `ASAP`, `urgent` 키워드 포함 시 🔴 우선순위 뱃지
+
+---
+
+### 3. 맥락 기반 그룹핑
+
+시간순 나열이 아닌, **프레임(화면) 단위**로 묶어서 표시합니다.
+
+```
+📁 Home 화면
+   ├─ 🟠 수정 요청: 3건
+   └─ 🔵 질문: 1건
+
+📁 Settings 화면
+   └─ 🔴 버그: 2건
+```
+
+---
+
+### 4. 딥링크 (Zoom to Comment)
+
+요약 항목 클릭 시:
+- 해당 코멘트 위치로 **뷰포트 자동 이동**
+- 적절한 줌 레벨로 **줌인**
+
+---
+
+## 🖥️ UI 요구사항
+
+- **리스트 형태**의 심플한 UI
+- 각 항목에 **체크박스** 포함 (To-Do 리스트처럼)
+- 처리 완료 시 체크 → 숨김 처리 가능
+- `전체 보기` / `미완료만 보기` 필터
+
+---
+
+## 🛠️ 기술 스택
+
+| 영역 | 기술 |
+|------|------|
+| 플러그인 코드 | TypeScript |
+| UI | HTML + CSS + JavaScript |
+| 코멘트 조회 | Figma REST API |
+| AI 분류 | OpenAI API (GPT-4o-mini) |
+| 상태 저장 | Figma clientStorage |
+
+---
+
+## 📁 프로젝트 구조
 
 ```
 Figma-Plugin/
-├── manifest.json      # Figma 플러그인 매니페스트
-├── ui.html           # 플러그인 UI
+├── manifest.json          # Figma 플러그인 설정
+├── ui.html                # 플러그인 UI
 ├── src/
-│   └── code.ts       # 플러그인 메인 로직 (TypeScript)
-├── dist/             # 빌드 결과물 (자동 생성)
-│   └── code.js
-├── package.json      # npm 패키지 설정
-├── tsconfig.json     # TypeScript 설정
+│   └── code.ts            # 메인 로직 (TypeScript)
+├── docs/
+│   └── PRD.md             # 상세 기능 정의서
+├── package.json
+├── tsconfig.json
 └── README.md
 ```
 
-## 시작하기
+---
+
+## 🚀 시작하기
 
 ### 1. 의존성 설치
-
 ```bash
 npm install
 ```
 
 ### 2. 빌드
-
 ```bash
 npm run build
 ```
 
-### 3. 개발 모드 (파일 변경 감지)
-
+### 3. 개발 모드
 ```bash
 npm run watch
 ```
 
-## Figma에서 플러그인 로드하기
+### 4. Figma에서 로드
+1. Figma Desktop 앱 실행
+2. **Plugins > Development > Import plugin from manifest...**
+3. `manifest.json` 선택
 
-1. Figma Desktop 앱을 엽니다.
-2. 파일을 열거나 새 파일을 생성합니다.
-3. 메뉴에서 **Plugins > Development > Import plugin from manifest...** 를 선택합니다.
-4. 이 프로젝트의 `manifest.json` 파일을 선택합니다.
-5. 플러그인이 로드되면 **Plugins > Development > My Figma Plugin** 에서 실행할 수 있습니다.
+---
 
-## 기능
+## 📄 문서
 
-현재 이 플러그인은 다음 기능을 포함하고 있습니다:
+- [상세 PRD (기능 정의서)](./docs/PRD.md)
+- [커밋 컨벤션](./commit_convention.md)
 
-- 지정한 개수만큼 사각형 생성
-- 각 사각형에 그라데이션 색상 적용
-- 생성된 사각형 자동 선택 및 뷰포트 이동
+---
 
-## 커스터마이징
+## 📝 라이선스
 
-### 플러그인 정보 변경
-
-`manifest.json` 파일에서 플러그인 이름과 ID를 수정하세요:
-
-```json
-{
-  "name": "Your Plugin Name",
-  "id": "your-unique-plugin-id"
-}
-```
-
-### UI 수정
-
-`ui.html` 파일에서 플러그인의 UI를 수정할 수 있습니다.
-
-### 로직 수정
-
-`src/code.ts` 파일에서 플러그인의 동작을 수정할 수 있습니다.
-
-## 참고 자료
-
-- [Figma Plugin API 문서](https://www.figma.com/plugin-docs/)
-- [Figma Plugin Samples](https://github.com/figma/plugin-samples)
+MIT License
