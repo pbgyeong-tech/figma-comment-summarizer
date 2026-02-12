@@ -242,7 +242,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
       console.log(`🔍 부모 코멘트 ${Object.keys(parentFrameMap).length}개에서 프레임 매핑 완료`);
 
-      // 2단계: 모든 코멘트에 프레임 + 계층 정보 추가 (답글은 부모 정보 상속)
+      // 2단계: 모든 코멘트에 프레임 + 계층 + 쓰레드 정보 추가
       const enrichedComments = comments.map((comment: any) => {
         let nodeId = comment.client_meta?.node_id
           || comment.client_meta?.node_offset?.node_id
@@ -264,7 +264,11 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
           hierarchy = parent.hierarchy;
         }
 
-        return { ...comment, frameName, frameId, resolvedNodeId: nodeId, hierarchy };
+        // 쓰레드 ID: 부모 코멘트 ID (답글이면 parent_id, 아니면 자기 id)
+        const threadId = comment.parent_id || comment.id;
+        const isReply = !!comment.parent_id;
+
+        return { ...comment, frameName, frameId, resolvedNodeId: nodeId, hierarchy, threadId, isReply };
       });
 
       // 체크 상태 로드

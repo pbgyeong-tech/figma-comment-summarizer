@@ -548,7 +548,118 @@
       font-size: 11px;
     }
 
-    /* ===== Hierarchy Sub-Group ===== */
+    /* ===== Frame-Level Header ===== */
+    .frame-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      margin: 8px 0 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #444;
+      border-bottom: 1px solid #e0e0e0;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .frame-header:hover {
+      background: #f5f5f5;
+    }
+
+    .frame-header .frame-arrow {
+      font-size: 9px;
+      transition: transform 0.2s;
+      color: #999;
+    }
+
+    .frame-header .frame-arrow.open {
+      transform: rotate(90deg);
+    }
+
+    .frame-header .frame-count {
+      margin-left: auto;
+      font-weight: 400;
+      font-size: 10px;
+      color: #999;
+    }
+
+    .frame-items-container {
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .frame-items-container.frame-collapsed {
+      max-height: 0 !important;
+    }
+
+    /* ===== Thread Card ===== */
+    .thread-card {
+      background: #fafafa;
+      border-radius: 8px;
+      margin: 6px 4px;
+      overflow: hidden;
+      border: 1px solid #eee;
+      transition: border-color 0.2s;
+    }
+
+    .thread-card:hover {
+      border-color: #ccc;
+    }
+
+    .thread-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .thread-head .comment-content {
+      flex: 1;
+    }
+
+    .thread-reply-badge {
+      font-size: 10px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .thread-replies {
+      border-top: 1px solid #eee;
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .thread-replies.thread-open {
+      max-height: 2000px;
+    }
+
+    .thread-reply-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 12px 8px 32px;
+      background: #f5f5f5;
+      border-top: 1px solid #eee;
+      font-size: 11px;
+    }
+
+    .thread-reply-item .reply-msg {
+      color: #555;
+      line-height: 1.5;
+    }
+
+    .thread-reply-item .reply-meta {
+      font-size: 10px;
+      color: #999;
+      margin-top: 2px;
+    }
+
     .sub-group-header {
       display: flex;
       align-items: center;
@@ -802,7 +913,6 @@
     let currentFilter = 'all'; // 'all' | 'pending'
     let allClassifiedComments = []; // 분류된 코멘트 전체 저장
     let currentCheckedStates = {}; // 체크 상태
-    let frameSummaries = {}; // 프레임별 AI 요약 카드 데이터
 
     tabAll.addEventListener('click', () => {
       tabAll.classList.add('active');
@@ -1132,6 +1242,47 @@
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+    // 코멘트를 leaf-frame 단위로 그룹핑 (hierarchy 끝단 기준)
+    function groupByLeafFrame(comments) {
+      const frameGroups = {};
+      comments.forEach(c => {
+        const h = c.hierarchy || [];
+        // leaf-frame key: hierarchy 전체 경로 (예: "8-3. Digital Key > P-8300-1")
+        const key = h.length > 1
+          ? h.slice(1).map(a => a.name).join(' > ')
+          : h.length === 1 ? h[0].name : '기타';
+        if (!frameGroups[key]) frameGroups[key] = [];
+        frameGroups[key].push(c);
+      });
+      return frameGroups;
+    }
+
+    // 코멘트를 쓰레드 단위로 묶기
+    function groupByThread(comments) {
+      const threads = {};
+      // 부모 코멘트 먼저
+      comments.filter(c => !c.isReply).forEach(c => {
+        threads[c.id] = { parent: c, replies: [] };
+      });
+      // 답글 추가
+      comments.filter(c => c.isReply).forEach(c => {
+        if (threads[c.threadId]) {
+          threads[c.threadId].replies.push(c);
+        } else {
+          // 부모가 필터 밖이면 답글을 독립 쓰레드로
+          threads[c.threadId] = { parent: c, replies: [] };
+        }
+      });
+      // 시간순 정렬
+      Object.values(threads).forEach(t => {
+        t.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      });
+      return threads;
+    }
+
+    // 요약 데이터 저장소: framePath → { summary, classifiedComments }
+    let allFrameSummaries = {};
+
     async function classifyAndRenderComments(comments) {
       const geminiKey = geminiKeyInput.value.trim();
 
@@ -1149,18 +1300,7 @@
         return;
       }
 
-      // 1단계: 로컬 프레임별 그룹핑 (API 호출 전)
-      const groups = {};
-      comments.forEach(c => {
-        const key = c.frameName || '기타';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(c);
-      });
-
-      const frameNames = Object.keys(groups);
-      console.log(`🚀 ${frameNames.length}개 프레임 통합 처리 시작 (분류+요약 동시)`);
-
-      // 먼저 기본값으로 전체 렌더링 (로딩 상태 표시)
+      // 먼저 기본값으로 전체 렌더링 (로딩 상태)
       allClassifiedComments = comments.map(comment => ({
         ...comment,
         category: 'discussion',
@@ -1168,24 +1308,28 @@
         summary: comment.message.substring(0, 30),
         checked: currentCheckedStates[comment.id] || false
       }));
-      frameSummaries = {};
+      allFrameSummaries = {};
       renderCommentList(allClassifiedComments);
-      updateEmptyState('loading', `AI 분석 중... (0/${frameNames.length} 프레임)`);
 
-      // 2단계: 프레임별 One-Shot API 호출
+      // leaf-frame 단위로 그룹핑
+      const frameGroups = groupByLeafFrame(allClassifiedComments);
+      const framePaths = Object.keys(frameGroups);
+      console.log(`🚀 ${framePaths.length}개 프레임(leaf) 통합 처리 시작`);
+
+      updateEmptyState('loading', `AI 분석 중... (0/${framePaths.length} 프레임)`);
+
       let failedFrames = 0;
 
-      for (let i = 0; i < frameNames.length; i++) {
-        const frameName = frameNames[i];
-        const frameComments = groups[frameName];
+      for (let i = 0; i < framePaths.length; i++) {
+        const framePath = framePaths[i];
+        const frameComments = frameGroups[framePath];
 
-        updateEmptyState('loading', `AI 분석 중... (${i + 1}/${frameNames.length} 프레임: ${frameName})`);
+        updateEmptyState('loading', `AI 분석 중... (${i + 1}/${framePaths.length}: ${framePath})`);
 
-        // 코멘트 1개면 API 호출 불필요
+        // 코멘트 1개 이하면 간단 처리
         if (frameComments.length < 2) {
           const c = frameComments[0];
-          // 분류: 기본값 유지
-          frameSummaries[frameName] = {
+          allFrameSummaries[framePath] = {
             summary: {
               title: c.message.substring(0, 15),
               status: 'Open',
@@ -1193,36 +1337,32 @@
               decisions: []
             },
             classifiedComments: [{
-              id: c.id,
-              category: 'discussion',
-              priority: 'normal',
+              id: c.id, category: 'discussion', priority: 'normal',
               summary: c.message.substring(0, 20)
             }]
           };
-          applyFrameResult(frameName, frameSummaries[frameName], frameComments);
-          updateSummaryCard(frameName);
+          applyFrameResult(framePath, allFrameSummaries[framePath], frameComments);
           continue;
         }
 
         try {
-          const prompt = buildOneShotPrompt(frameName, frameComments);
+          // 쓰레드 구조로 프롬프트 생성
+          const threads = groupByThread(frameComments);
+          const prompt = buildThreadAwarePrompt(framePath, threads);
           const result = await callGeminiAPI(geminiKey, prompt);
-          frameSummaries[frameName] = result;
-          applyFrameResult(frameName, result, frameComments);
-          updateSummaryCard(frameName);
-          console.log(`  ✅ "${frameName}" 완료 (${frameComments.length}개 코멘트)`);
+          allFrameSummaries[framePath] = result;
+          applyFrameResult(framePath, result, frameComments);
+          console.log(`  ✅ "${framePath}" 완료 (${frameComments.length}개 코멘트, ${Object.keys(threads).length} 쓰레드)`);
         } catch (error) {
-          console.warn(`  ⚠️ "${frameName}" 실패:`, error.message);
+          console.warn(`  ⚠️ "${framePath}" 실패:`, error.message);
           failedFrames++;
-          frameSummaries[frameName] = {
+          allFrameSummaries[framePath] = {
             summary: { title: '분석 실패', status: 'Error', issues: [], decisions: [] },
             classifiedComments: []
           };
-          updateSummaryCard(frameName);
         }
 
-        // 마지막 프레임이 아니면 딜레이
-        if (i < frameNames.length - 1) {
+        if (i < framePaths.length - 1) {
           await sleep(FRAME_DELAY_MS);
         }
       }
@@ -1230,16 +1370,16 @@
       // 최종 렌더링
       renderCommentList(allClassifiedComments);
 
-      const successFrames = frameNames.length - failedFrames;
+      const successFrames = framePaths.length - failedFrames;
       if (failedFrames === 0) {
-        showToast(`${frameNames.length}개 프레임 분석 완료`, 'success');
+        showToast(`${framePaths.length}개 프레임 분석 완료`, 'success');
       } else {
-        showToast(`${successFrames}/${frameNames.length} 프레임 성공, ${failedFrames}개 실패`, 'error');
+        showToast(`${successFrames}/${framePaths.length} 프레임 성공, ${failedFrames}개 실패`, 'error');
       }
     }
 
     // 프레임 결과를 allClassifiedComments에 반영
-    function applyFrameResult(frameName, result, frameComments) {
+    function applyFrameResult(framePath, result, frameComments) {
       const classified = result.classifiedComments || [];
       frameComments.forEach(comment => {
         const match = classified.find(c => c.id === comment.id);
@@ -1254,20 +1394,26 @@
       });
     }
 
-    function buildOneShotPrompt(frameName, comments) {
-      const commentList = comments.map(c =>
-        `{"id":"${c.id}","user":"${c.user?.handle || 'unknown'}","msg":"${c.message.replace(/"/g, '\\"').replace(/\n/g, ' ').substring(0, 300)}"}`
-      ).join(',\n');
+    function buildThreadAwarePrompt(framePath, threads) {
+      // 쓰레드 구조로 코멘트 정리
+      const threadList = Object.values(threads).map(t => {
+        const parentMsg = `[부모] "${t.parent.user?.handle || 'unknown'}": "${t.parent.message.replace(/"/g, '\\"').replace(/\n/g, ' ').substring(0, 300)}"`;
+        const replies = t.replies.map(r =>
+          `  [답글] "${r.user?.handle || 'unknown'}": "${r.message.replace(/"/g, '\\"').replace(/\n/g, ' ').substring(0, 200)}"`
+        ).join('\n');
+        const ids = [t.parent.id, ...t.replies.map(r => r.id)].join(',');
+        return `쓰레드(ids:${ids}):\n${parentMsg}${replies ? '\n' + replies : ''}`;
+      }).join('\n\n');
 
-      return `아래는 Figma 프레임 "${frameName}"에 달린 코멘트 대화입니다.
-두 가지를 동시에 분석해주세요:
+      return `아래는 Figma 프레임 "${framePath}"에 달린 코멘트 대화입니다.
+쓰레드(부모+답글) 단위로 정리되어 있습니다.
 
-[코멘트 목록]
-[${commentList}]
+[쓰레드 목록]
+${threadList}
 
 === 분석 요청 ===
-1) summary: 이 프레임의 대화를 한국어로 요약
-2) classifiedComments: 각 코멘트를 분류
+1) summary: 이 프레임의 전체 대화를 한국어로 요약
+2) classifiedComments: 각 코멘트를 분류 (부모+답글 모두)
 
 JSON 형식으로만 응답:
 {
@@ -1275,28 +1421,12 @@ JSON 형식으로만 응답:
     "title": "핵심 주제 15자이내",
     "status": "Open 또는 Resolved",
     "issues": ["주요 이슈 (한국어)"],
-    "decisions": ["결정/할 일 (한국어)"]
+    "decisions": ["결정/완료된 것 (한국어)"]
   },
   "classifiedComments": [
     {"id":"원본id","category":"bug|change_request|question|discussion","priority":"urgent|normal","summary":"한국어 한줄요약 20자이내"}
   ]
 }`;
-    }
-
-    function updateSummaryCard(frameName) {
-      const card = document.querySelector(`.summary-card[data-frame="${CSS.escape(frameName)}"]`);
-      if (!card) return;
-      const data = frameSummaries[frameName]?.summary;
-      if (!data) return;
-
-      const statusColor = data.status === 'Resolved' ? '#4caf50' : '#fb8c00';
-      const statusLabel = data.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
-
-      let html = `<div class="summary-card-title">💡 ${data.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
-      if (data.issues?.length) html += data.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
-      if (data.decisions?.length) html += data.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
-
-      card.innerHTML = html;
     }
 
     // ===== Phase 1-4: UI 렌더링 =====
@@ -1315,18 +1445,17 @@ JSON 형식으로만 응답:
         filtered = comments.filter(c => !c.checked);
       }
 
-      // 프레임별 그룹핑
-      const groups = {};
+      // Level 1: 최상위 Section별 그룹핑
+      const sectionGroups = {};
       filtered.forEach(comment => {
         const key = comment.frameName || '기타';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(comment);
+        if (!sectionGroups[key]) sectionGroups[key] = [];
+        sectionGroups[key].push(comment);
       });
 
-      // 코멘트 수 기준 내림차순 정렬
-      const sortedKeys = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
+      const sortedSections = Object.keys(sectionGroups).sort((a, b) => sectionGroups[b].length - sectionGroups[a].length);
 
-      if (sortedKeys.length === 0) {
+      if (sortedSections.length === 0) {
         emptyState.style.display = 'flex';
         commentList.style.display = 'none';
         updateEmptyState('empty', currentFilter === 'pending' ? '미완료 코멘트가 없습니다' : '해당 기간에 코멘트가 없습니다');
@@ -1335,12 +1464,12 @@ JSON 형식으로만 응답:
       }
 
       let html = '';
-      sortedKeys.forEach(frameName => {
-        const groupComments = groups[frameName];
+      sortedSections.forEach(sectionName => {
+        const sectionComments = sectionGroups[sectionName];
 
-        // 그룹 헤더
+        // Section 헤더 (category badges)
         const categoryCounts = {};
-        groupComments.forEach(c => {
+        sectionComments.forEach(c => {
           categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
         });
         const categoryBadges = Object.entries(categoryCounts)
@@ -1350,109 +1479,134 @@ JSON 형식으로만 응답:
         html += `<div class="comment-group">`;
         html += `<div class="group-header">
           <span class="group-icon">📁</span>
-          <span>${frameName}</span>
+          <span>${sectionName}</span>
           <span style="margin-left:auto; font-size:10px; color:#999; font-weight:400;">${categoryBadges}</span>
         </div>`;
 
-        // AI 요약 카드 (로딩 또는 데이터)
-        const frameData = frameSummaries[frameName];
-        const summary = frameData?.summary;
-        if (summary) {
-          const statusColor = summary.status === 'Resolved' ? '#4caf50' : '#fb8c00';
-          const statusLabel = summary.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
-          html += `<div class="summary-card" data-frame="${frameName}">`;
-          html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
-          if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
-          if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
-          html += `</div>`;
-        } else {
-          html += `<div class="summary-card" data-frame="${frameName}"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
-        }
-
-        // 아코디언 토글
-        html += `<button class="group-toggle" data-frame="${frameName}">
-          <span class="toggle-arrow">▶</span> 코멘트 ${groupComments.length}건 보기
+        // Level 1 아코디언 토글
+        html += `<button class="group-toggle" data-frame="${sectionName}">
+          <span class="toggle-arrow">▶</span> 코멘트 ${sectionComments.length}건 보기
         </button>`;
 
-        // 코멘트 목록 (기본 접힌 상태)
-        html += `<div class="comment-items-container collapsed" data-frame-items="${frameName}">`;
+        html += `<div class="comment-items-container collapsed" data-frame-items="${sectionName}">`;
 
-        // 계층별 서브 그룹핑 (hierarchy[1:]로 하위 경로 추출)
-        const subGroups = {};
-        groupComments.forEach(c => {
+        // Level 2+3: leaf-frame별 그룹핑
+        const frameGroups = {};
+        sectionComments.forEach(c => {
           const h = c.hierarchy || [];
-          // hierarchy[0]은 최상위 Section (이미 그룹핑됨), [1:]이 하위 경로
-          const subPath = h.length > 1
+          const key = h.length > 1
             ? h.slice(1).map(a => a.name).join(' > ')
             : '일반';
-          if (!subGroups[subPath]) subGroups[subPath] = [];
-          subGroups[subPath].push(c);
+          if (!frameGroups[key]) frameGroups[key] = [];
+          frameGroups[key].push(c);
         });
 
-        const subKeys = Object.keys(subGroups).sort((a, b) => {
+        const frameKeys = Object.keys(frameGroups).sort((a, b) => {
           if (a === '일반') return 1;
           if (b === '일반') return -1;
-          return subGroups[b].length - subGroups[a].length;
+          return frameGroups[b].length - frameGroups[a].length;
         });
 
-        const hasMultipleSubs = subKeys.length > 1 || (subKeys.length === 1 && subKeys[0] !== '일반');
+        const hasMultipleFrames = frameKeys.length > 1 || (frameKeys.length === 1 && frameKeys[0] !== '일반');
 
-        let subIdx = 0;
-        subKeys.forEach(subPath => {
-          const subComments = subGroups[subPath];
-          const subId = `${frameName}__sub${subIdx++}`;
+        let frameIdx = 0;
+        frameKeys.forEach(framePath => {
+          const frameComments = frameGroups[framePath];
+          const frameId = `${sectionName}__frame${frameIdx++}`;
 
-          // 서브 그룹 헤더 (2개 이상 서브그룹이 있을 때만 표시)
-          if (hasMultipleSubs && subPath !== '일반') {
-            html += `<div class="sub-group-header" data-sub-id="${subId}">
-              <span class="sub-arrow open">▶</span>
-              <span class="sub-icon">📂</span>
-              <span>${subPath}</span>
-              <span class="sub-count">${subComments.length}건</span>
+          // Frame 헤더 (접기/펼치기)
+          if (hasMultipleFrames && framePath !== '일반') {
+            html += `<div class="frame-header" data-frame-id="${frameId}">
+              <span class="frame-arrow open">▶</span>
+              <span>�</span>
+              <span>${framePath}</span>
+              <span class="frame-count">${frameComments.length}건</span>
             </div>`;
-          } else if (hasMultipleSubs && subPath === '일반') {
-            html += `<div class="sub-group-header" data-sub-id="${subId}">
-              <span class="sub-arrow open">▶</span>
-              <span class="sub-icon">📎</span>
+          } else if (hasMultipleFrames && framePath === '일반') {
+            html += `<div class="frame-header" data-frame-id="${frameId}">
+              <span class="frame-arrow open">▶</span>
+              <span>📎</span>
               <span>기타 코멘트</span>
-              <span class="sub-count">${subComments.length}건</span>
+              <span class="frame-count">${frameComments.length}건</span>
             </div>`;
           }
 
-          // 서브 그룹 코멘트 컨테이너
-          if (hasMultipleSubs) {
-            html += `<div class="sub-items-container" data-sub-items="${subId}">`;
+          // Frame 콘텐츠 컨테이너
+          if (hasMultipleFrames) {
+            html += `<div class="frame-items-container" data-frame-items-id="${frameId}">`;
           }
 
-          // 우선순위 urgent 먼저, 그 다음 최신순
-          const sorted = [...subComments].sort((a, b) => {
-            if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-            if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-            return new Date(b.created_at) - new Date(a.created_at);
+          // Frame-level AI 요약 카드
+          const frameData = allFrameSummaries[framePath];
+          const summary = frameData?.summary;
+          if (summary && summary.title !== '분석 실패') {
+            const statusColor = summary.status === 'Resolved' ? '#4caf50' : '#fb8c00';
+            const statusLabel = summary.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
+            html += `<div class="summary-card">`;
+            html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
+            if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
+            if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
+            html += `</div>`;
+          } else if (!frameData) {
+            html += `<div class="summary-card"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
+          }
+
+          // 쓰레드 단위 렌더링
+          const threads = groupByThread(frameComments);
+          const threadEntries = Object.values(threads).sort((a, b) => {
+            // urgent 먼저, 그 다음 최신순
+            if (a.parent.priority === 'urgent' && b.parent.priority !== 'urgent') return -1;
+            if (b.parent.priority === 'urgent' && a.parent.priority !== 'urgent') return 1;
+            return new Date(b.parent.created_at) - new Date(a.parent.created_at);
           });
 
-          sorted.forEach(comment => {
-            const cat = CATEGORY_MAP[comment.category] || CATEGORY_MAP.discussion;
-            const urgentBadge = comment.priority === 'urgent'
+          threadEntries.forEach(thread => {
+            const p = thread.parent;
+            const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.discussion;
+            const nodeId = p.resolvedNodeId || p.client_meta?.node_id || '';
+            const urgentBadge = p.priority === 'urgent'
               ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
               : '';
-            const nodeId = comment.resolvedNodeId || comment.client_meta?.node_id || '';
-            const checkedAttr = comment.checked ? 'checked' : '';
-            const checkedStyle = comment.checked ? 'opacity: 0.5;' : '';
+            const checkedAttr = p.checked ? 'checked' : '';
+            const checkedStyle = p.checked ? 'opacity: 0.5;' : '';
+            const replyCount = thread.replies.length;
+            const threadId = `thread_${p.threadId || p.id}`;
 
-            html += `
-              <div class="comment-item" data-node-id="${nodeId}" data-comment-id="${comment.id}" style="${checkedStyle}">
-                <input type="checkbox" class="comment-checkbox" data-id="${comment.id}" ${checkedAttr}>
-                <div class="comment-content">
-                  <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
-                  <p class="comment-summary">${comment.summary || comment.message.substring(0, 30)}</p>
-                  <p class="comment-meta">@${comment.user?.handle || 'unknown'} · ${formatRelativeTime(comment.created_at)}</p>
-                </div>
-              </div>`;
+            html += `<div class="thread-card" data-thread-id="${threadId}" style="${checkedStyle}">`;
+
+            // 쓰레드 헤드 (부모 코멘트)
+            html += `<div class="thread-head" data-node-id="${nodeId}">
+              <input type="checkbox" class="comment-checkbox" data-id="${p.id}" ${checkedAttr}>
+              <div class="comment-content">
+                <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
+                <p class="comment-summary">${p.summary || p.message.substring(0, 40)}</p>
+                <p class="comment-meta">@${p.user?.handle || 'unknown'} · ${formatRelativeTime(p.created_at)}</p>
+                ${replyCount > 0 ? `<p class="thread-reply-badge">💬 ${replyCount}개 답글 · 클릭하여 펼치기</p>` : ''}
+              </div>
+            </div>`;
+
+            // 답글 리스트 (기본 접힌 상태)
+            if (replyCount > 0) {
+              html += `<div class="thread-replies" data-thread-replies="${threadId}">`;
+              thread.replies.forEach(r => {
+                const rChecked = r.checked ? 'checked' : '';
+                const rStyle = r.checked ? 'opacity: 0.5;' : '';
+                html += `<div class="thread-reply-item" data-node-id="${r.resolvedNodeId || ''}" data-comment-id="${r.id}" style="${rStyle}">
+                  <input type="checkbox" class="comment-checkbox" data-id="${r.id}" ${rChecked}>
+                  <div>
+                    <div class="reply-msg">${r.summary || r.message.substring(0, 60)}</div>
+                    <div class="reply-meta">@${r.user?.handle || 'unknown'} · ${formatRelativeTime(r.created_at)}</div>
+                  </div>
+                </div>`;
+              });
+              html += `</div>`;
+            }
+
+            html += `</div>`; // thread-card
           });
 
-          if (hasMultipleSubs) {
-            html += `</div>`; // sub-items-container
+          if (hasMultipleFrames) {
+            html += `</div>`; // frame-items-container
           }
         });
 
@@ -1469,7 +1623,7 @@ JSON 형식으로만 응답:
     }
 
     function attachCommentEvents() {
-      // 아코디언 토글
+      // Level 1: Section 아코디언 토글
       commentList.querySelectorAll('.group-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
           const frameName = btn.getAttribute('data-frame');
@@ -1486,32 +1640,70 @@ JSON 형식으로만 응답:
             container.classList.add('collapsed');
             container.style.maxHeight = '0';
             arrow.classList.remove('open');
-            const count = container.querySelectorAll('.comment-item').length;
+            const count = container.querySelectorAll('.thread-card').length;
             btn.innerHTML = `<span class="toggle-arrow">▶</span> 코멘트 ${count}건 보기`;
           }
         });
       });
 
-      // 서브 그룹 토글
-      commentList.querySelectorAll('.sub-group-header').forEach(header => {
+      // Level 2/3: Frame 그룹 토글
+      commentList.querySelectorAll('.frame-header').forEach(header => {
         header.addEventListener('click', () => {
-          const subId = header.getAttribute('data-sub-id');
-          const container = commentList.querySelector(`[data-sub-items="${subId}"]`);
-          const arrow = header.querySelector('.sub-arrow');
+          const frameId = header.getAttribute('data-frame-id');
+          const container = commentList.querySelector(`[data-frame-items-id="${frameId}"]`);
+          const arrow = header.querySelector('.frame-arrow');
           if (!container) return;
 
-          if (container.classList.contains('sub-collapsed')) {
-            container.classList.remove('sub-collapsed');
+          if (container.classList.contains('frame-collapsed')) {
+            container.classList.remove('frame-collapsed');
             container.style.maxHeight = container.scrollHeight + 'px';
             if (arrow) arrow.classList.add('open');
           } else {
-            container.classList.add('sub-collapsed');
+            container.classList.add('frame-collapsed');
             container.style.maxHeight = '0';
             if (arrow) arrow.classList.remove('open');
           }
 
           // 부모 컨테이너의 maxHeight 재계산
           const parentContainer = header.closest('.comment-items-container');
+          if (parentContainer && !parentContainer.classList.contains('collapsed')) {
+            setTimeout(() => {
+              parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
+            }, 350);
+          }
+        });
+      });
+
+      // 쓰레드 클릭 → 답글 펼침 + 줌인
+      commentList.querySelectorAll('.thread-head').forEach(head => {
+        head.addEventListener('click', (e) => {
+          if (e.target.type === 'checkbox') return;
+
+          const threadCard = head.closest('.thread-card');
+          const threadId = threadCard?.getAttribute('data-thread-id');
+          const repliesContainer = threadCard?.querySelector('.thread-replies');
+
+          // 답글 토글
+          if (repliesContainer) {
+            repliesContainer.classList.toggle('thread-open');
+            const badge = head.querySelector('.thread-reply-badge');
+            if (badge) {
+              badge.textContent = repliesContainer.classList.contains('thread-open')
+                ? '💬 답글 접기'
+                : `💬 ${repliesContainer.querySelectorAll('.thread-reply-item').length}개 답글 · 클릭하여 펼치기`;
+            }
+          }
+
+          // 줌인
+          const nodeId = head.getAttribute('data-node-id');
+          if (nodeId) {
+            parent.postMessage({
+              pluginMessage: { type: 'zoom-to-node', nodeId }
+            }, '*');
+          }
+
+          // 부모 maxHeight 재계산
+          const parentContainer = head.closest('.comment-items-container');
           if (parentContainer && !parentContainer.classList.contains('collapsed')) {
             setTimeout(() => {
               parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
@@ -1528,8 +1720,8 @@ JSON 형식으로만 응답:
           const checked = e.target.checked;
 
           // UI 상태 업데이트
-          const item = e.target.closest('.comment-item');
-          item.style.opacity = checked ? '0.5' : '1';
+          const item = e.target.closest('.thread-card') || e.target.closest('.thread-reply-item');
+          if (item) item.style.opacity = checked ? '0.5' : '1';
 
           // 데이터 업데이트
           currentCheckedStates[commentId] = checked;
@@ -1546,19 +1738,6 @@ JSON 형식으로만 응답:
           // 미완료 필터 중이면 완료된 항목 제거
           if (currentFilter === 'pending' && checked) {
             setTimeout(() => renderCommentList(allClassifiedComments), 300);
-          }
-        });
-      });
-
-      // 코멘트 클릭 → 딥링크
-      commentList.querySelectorAll('.comment-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-          if (e.target.type === 'checkbox') return; // 체크박스 클릭은 제외
-          const nodeId = item.getAttribute('data-node-id');
-          if (nodeId) {
-            parent.postMessage({
-              pluginMessage: { type: 'zoom-to-node', nodeId }
-            }, '*');
           }
         });
       });
