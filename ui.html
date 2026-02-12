@@ -182,6 +182,106 @@
       color: #999;
     }
 
+    /* ===== Modern Loading Screen ===== */
+    .loading-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 20px;
+    }
+
+    .loading-spinner-ring {
+      width: 64px;
+      height: 64px;
+      position: relative;
+    }
+
+    .loading-spinner-ring svg {
+      width: 64px;
+      height: 64px;
+      animation: spin 1.5s linear infinite;
+    }
+
+    .loading-spinner-ring .ring-bg {
+      fill: none;
+      stroke: #e8f0fe;
+      stroke-width: 4;
+    }
+
+    .loading-spinner-ring .ring-fg {
+      fill: none;
+      stroke: url(#loadingGradient);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 150;
+      stroke-dashoffset: 100;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+
+    .loading-step-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      text-align: center;
+      transition: opacity 0.3s ease;
+      min-height: 22px;
+    }
+
+    .loading-sub-text {
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      margin-top: -12px;
+      min-height: 16px;
+    }
+
+    .loading-progress-wrap {
+      width: 200px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .loading-progress-bar {
+      width: 100%;
+      height: 4px;
+      background: #e8f0fe;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .loading-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4285f4, #18a0fb);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+
+    .loading-progress-label {
+      font-size: 10px;
+      color: #aaa;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .fade-in-up {
+      animation: fadeInUp 0.3s ease forwards;
+    }
+
     /* ===== Comment List (placeholder) ===== */
     .comment-list {
       display: none;
@@ -784,6 +884,30 @@
       <p class="empty-desc">기간을 선택하고 API 키를 설정해주세요</p>
     </div>
 
+    <!-- Modern Loading Screen -->
+    <div class="loading-screen" id="loadingScreen" style="display:none;">
+      <div class="loading-spinner-ring">
+        <svg viewBox="0 0 64 64">
+          <defs>
+            <linearGradient id="loadingGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#4285f4" />
+              <stop offset="100%" stop-color="#18a0fb" />
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="32" cy="32" r="24" />
+          <circle class="ring-fg" id="loadingRing" cx="32" cy="32" r="24" />
+        </svg>
+      </div>
+      <div class="loading-step-text" id="loadingStepText">🗂️ 피그마 파일 스캔 중...</div>
+      <div class="loading-sub-text" id="loadingSubText"></div>
+      <div class="loading-progress-wrap">
+        <div class="loading-progress-bar">
+          <div class="loading-progress-fill" id="loadingProgressFill"></div>
+        </div>
+        <div class="loading-progress-label" id="loadingProgressLabel"></div>
+      </div>
+    </div>
+
     <!-- Comment List (will be populated by JS) -->
     <div class="comment-list" id="commentList">
       <!-- Example structure for reference:
@@ -1141,22 +1265,70 @@
       }
     }
 
-    // Empty State 업데이트 함수
+    // Loading Screen 요소
+    const loadingScreen = document.getElementById('loadingScreen');
+    const loadingStepText = document.getElementById('loadingStepText');
+    const loadingSubText = document.getElementById('loadingSubText');
+    const loadingProgressFill = document.getElementById('loadingProgressFill');
+    const loadingProgressLabel = document.getElementById('loadingProgressLabel');
+    const loadingRing = document.getElementById('loadingRing');
+
+    let loadingStepTimer = null;
+
+    // 모던 로딩 화면 표시
+    function showLoadingScreen(totalFrames) {
+      emptyState.style.display = 'none';
+      commentList.style.display = 'none';
+      loadingScreen.style.display = 'flex';
+
+      // Step 1: 파일 스캔
+      updateLoadingStep('🗂️ 피그마 파일 스캔 중...', '', 0, totalFrames);
+
+      // 자동 단계 전환 (Step 1 → Step 2)
+      loadingStepTimer = setTimeout(() => {
+        updateLoadingStep('💬 전체 코멘트 수집 중...', '', 0, totalFrames);
+      }, 1500);
+    }
+
+    function updateLoadingStep(text, subText, current, total) {
+      if (loadingStepText) {
+        loadingStepText.classList.remove('fade-in-up');
+        void loadingStepText.offsetWidth; // reflow
+        loadingStepText.classList.add('fade-in-up');
+        loadingStepText.textContent = text;
+      }
+      if (loadingSubText) loadingSubText.textContent = subText || '';
+      if (total > 0) {
+        const pct = Math.round((current / total) * 100);
+        if (loadingProgressFill) loadingProgressFill.style.width = pct + '%';
+        if (loadingProgressLabel) loadingProgressLabel.textContent = `${current} / ${total} 프레임 분석 완료`;
+        // 프로그레스 링 연동
+        if (loadingRing) {
+          const circumference = 2 * Math.PI * 24; // r=24
+          const offset = circumference - (pct / 100) * circumference;
+          loadingRing.style.strokeDasharray = circumference;
+          loadingRing.style.strokeDashoffset = offset;
+        }
+      }
+    }
+
+    function hideLoadingScreen() {
+      if (loadingStepTimer) clearTimeout(loadingStepTimer);
+      loadingScreen.style.display = 'none';
+    }
+
+    // Empty State 업데이트 함수 (에러/빈 상태용)
     function updateEmptyState(state, message) {
+      hideLoadingScreen();
       const emptyIcon = emptyState.querySelector('.empty-icon');
       const emptyTitle = emptyState.querySelector('.empty-title');
       const emptyDesc = emptyState.querySelector('.empty-desc');
 
       switch (state) {
         case 'loading':
-          emptyIcon.innerHTML = `
-            <svg class="spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 11-6.219-8.56"></path>
-            </svg>
-          `;
-          emptyTitle.textContent = message || '로딩 중...';
-          emptyDesc.textContent = '';
-          break;
+          // 구버전 호환: showLoadingScreen으로 대체됨
+          emptyState.style.display = 'none';
+          return;
         case 'error':
           emptyIcon.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2">
@@ -1186,6 +1358,7 @@
           emptyTitle.textContent = '코멘트가 없습니다';
           emptyDesc.textContent = '기간을 선택하고 API 키를 설정해주세요';
       }
+      emptyState.style.display = 'flex';
     }
 
     // ===== Gemini API 통신 함수 (429 자동 재시도 포함) =====
@@ -1293,10 +1466,7 @@
         return;
       }
 
-      // 로딩 화면 표시 (AI 분석 완료까지 콘텐츠 숨김)
-      commentList.style.display = 'none';
-      emptyState.style.display = 'flex';
-
+      // 모던 로딩 화면 표시
       allClassifiedComments = comments.map(comment => ({
         ...comment,
         category: 'discussion',
@@ -1311,7 +1481,7 @@
       const framePaths = Object.keys(frameGroups);
       console.log(`🚀 ${framePaths.length}개 프레임(leaf) 통합 처리 시작`);
 
-      updateEmptyState('loading', `AI 분석 중... (0/${framePaths.length} 프레임)`);
+      showLoadingScreen(framePaths.length);
 
       let failedFrames = 0;
 
@@ -1319,7 +1489,12 @@
         const framePath = framePaths[i];
         const frameComments = frameGroups[framePath];
 
-        updateEmptyState('loading', `AI 분석 중... (${i + 1}/${framePaths.length}: ${framePath})`);
+        // Step 3: AI 분석 진행률
+        updateLoadingStep(
+          '🧠 AI가 스레드별로 분류하고 있어요...',
+          framePath,
+          i, framePaths.length
+        );
 
         // 코멘트 1개 이하면 간단 처리
         if (frameComments.length < 2) {
@@ -1361,6 +1536,11 @@
           await sleep(FRAME_DELAY_MS);
         }
       }
+
+      // Step 4: 최종 요약
+      updateLoadingStep('✨ 최종 요약 생성 중! 거의 다 됐어요.', '', framePaths.length, framePaths.length);
+      await sleep(600);
+      hideLoadingScreen();
 
       // 최종 렌더링
       renderCommentList(allClassifiedComments);
@@ -1653,6 +1833,24 @@ JSON 형식으로만 응답:
       attachCommentEvents();
     }
 
+    // maxHeight 재귀 재계산 헬퍼
+    function recalcAllAncestors(el) {
+      setTimeout(() => {
+        let container = el.closest('.frame-items-container');
+        while (container) {
+          if (!container.classList.contains('frame-collapsed')) {
+            container.style.maxHeight = container.scrollHeight + 'px';
+          }
+          container = container.parentElement?.closest('.frame-items-container');
+        }
+        // 최상위 comment-items-container
+        const topContainer = el.closest('.comment-items-container');
+        if (topContainer && !topContainer.classList.contains('collapsed')) {
+          topContainer.style.maxHeight = topContainer.scrollHeight + 'px';
+        }
+      }, 50);
+    }
+
     function attachCommentEvents() {
       // Level 1: Section 아코디언 토글
       commentList.querySelectorAll('.group-toggle').forEach(btn => {
@@ -1695,17 +1893,8 @@ JSON 형식으로만 응답:
             if (arrow) arrow.classList.remove('open');
           }
 
-          // 모든 부모 컨테이너의 maxHeight 재계산
-          let parent = header.closest('.frame-items-container') || header.closest('.comment-items-container');
-          setTimeout(() => {
-            while (parent) {
-              if (!parent.classList.contains('collapsed') && !parent.classList.contains('frame-collapsed')) {
-                parent.style.maxHeight = parent.scrollHeight + 'px';
-              }
-              parent = parent.parentElement?.closest('.frame-items-container') || parent.parentElement?.closest('.comment-items-container');
-              if (parent && parent === header.closest('.comment-items-container')?.parentElement) break;
-            }
-          }, 350);
+          // 모든 부모 컨테이너 maxHeight 재귀 재계산
+          recalcAllAncestors(header);
         });
       });
 
@@ -1734,13 +1923,8 @@ JSON 형식으로만 응답:
             }, '*');
           }
 
-          // 부모 maxHeight 재계산
-          const parentContainer = head.closest('.comment-items-container');
-          if (parentContainer && !parentContainer.classList.contains('collapsed')) {
-            setTimeout(() => {
-              parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
-            }, 350);
-          }
+          // 모든 부모 컨테이너 maxHeight 재귀 재계산
+          recalcAllAncestors(head);
         });
       });
     }
