@@ -1300,7 +1300,10 @@
         return;
       }
 
-      // 먼저 기본값으로 전체 렌더링 (로딩 상태)
+      // 로딩 화면 표시 (AI 분석 완료까지 콘텐츠 숨김)
+      commentList.style.display = 'none';
+      emptyState.style.display = 'flex';
+
       allClassifiedComments = comments.map(comment => ({
         ...comment,
         category: 'discussion',
@@ -1309,7 +1312,6 @@
         checked: currentCheckedStates[comment.id] || false
       }));
       allFrameSummaries = {};
-      renderCommentList(allClassifiedComments);
 
       // leaf-frame 단위로 그룹핑
       const frameGroups = groupByLeafFrame(allClassifiedComments);
@@ -1442,7 +1444,7 @@ JSON 형식으로만 응답:
       // 필터 적용
       let filtered = comments;
       if (currentFilter === 'pending') {
-        filtered = comments.filter(c => !c.checked);
+        filtered = comments.filter(c => !c.resolved_at);
       }
 
       // Level 1: 최상위 Section별 그룹핑
@@ -1757,7 +1759,7 @@ JSON 형식으로만 응답:
 
     function updateTabCounts(comments) {
       const total = comments.length;
-      const pending = comments.filter(c => !c.checked).length;
+      const pending = comments.filter(c => !c.resolved_at).length;
       tabAll.querySelector('.tab-count').textContent = total;
       tabPending.querySelector('.tab-count').textContent = pending;
     }
