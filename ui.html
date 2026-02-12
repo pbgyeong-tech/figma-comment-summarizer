@@ -614,9 +614,10 @@
       border: 1px solid #d2e3fc;
       border-radius: 8px;
       padding: 10px 12px;
-      margin: 6px 12px 4px;
+      margin: 6px 4px;
       font-size: 11px;
       line-height: 1.6;
+      word-break: break-all;
     }
 
     .summary-card-title {
@@ -1529,7 +1530,7 @@
           console.warn(`  ⚠️ "${framePath}" 실패:`, error.message);
           failedFrames++;
           allFrameSummaries[framePath] = {
-            summary: { title: '분석 실패', status: 'Error', issues: [], decisions: [] },
+            summary: { title: '분석 실패', status: 'Error', issues: ['AI 응답을 받아오지 못했습니다.'], decisions: [] },
             classifiedComments: []
           };
         }
@@ -1761,6 +1762,11 @@ JSON 형식으로만 응답:
               html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
               if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
               if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
+              html += `</div>`;
+            } else if (summary && summary.title === '분석 실패') {
+              html += `<div class="summary-card" style="background:#fff5f5; border-color:#ffcdd2;">`;
+              html += `<div class="summary-card-title" style="color:#d32f2f;">🚫 분석 실패</div>`;
+              if (summary.issues?.length) html += `<div class="summary-card-section">${summary.issues[0]}</div>`;
               html += `</div>`;
             } else if (!frameData) {
               html += `<div class="summary-card"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
