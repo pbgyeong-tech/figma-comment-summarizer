@@ -166,6 +166,15 @@ function getNodeHierarchy(nodeId: string): { frameName: string; frameId: string;
       });
     }
 
+    // 시작 노드 자신도 hierarchy 끝에 추가 (Frame 레벨 그룹핑용)
+    if (ancestors.length > 0 && node.id !== ancestors[ancestors.length - 1].id) {
+      ancestors.push({
+        name: node.name,
+        id: node.id,
+        type: node.type
+      });
+    }
+
     // 최상위 = ancestors[0], frameName은 최상위 이름 (기존 호환)
     const topLevel = ancestors[0] || { name: node.name, id: node.id, type: node.type };
 
