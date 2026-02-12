@@ -221,12 +221,6 @@
       background-color: #f0f0f0;
     }
 
-    .comment-checkbox {
-      margin-top: 2px;
-      width: 16px;
-      height: 16px;
-      accent-color: #18a0fb;
-    }
 
     .comment-content {
       flex: 1;
@@ -799,7 +793,6 @@
           <span>Home 화면</span>
         </div>
         <div class="comment-item">
-          <input type="checkbox" class="comment-checkbox">
           <div class="comment-content">
             <span class="comment-tag tag-change">수정 요청</span>
             <p class="comment-summary">로고 크기를 20% 줄여주세요</p>
@@ -1466,6 +1459,8 @@ JSON 형식으로만 응답:
       }
 
       let html = '';
+      let globalIdx = 0;
+
       sortedSections.forEach(sectionName => {
         const sectionComments = sectionGroups[sectionName];
 
@@ -1492,127 +1487,161 @@ JSON 형식으로만 응답:
 
         html += `<div class="comment-items-container collapsed" data-frame-items="${sectionName}">`;
 
-        // Level 2+3: leaf-frame별 그룹핑
-        const frameGroups = {};
+        // Level 2: Sub-Section별 그룹핑 (hierarchy[1])
+        const subSectionGroups = {};
         sectionComments.forEach(c => {
           const h = c.hierarchy || [];
-          const key = h.length > 1
-            ? h.slice(1).map(a => a.name).join(' > ')
-            : '일반';
-          if (!frameGroups[key]) frameGroups[key] = [];
-          frameGroups[key].push(c);
+          const subKey = h.length > 1 ? h[1].name : '일반';
+          if (!subSectionGroups[subKey]) subSectionGroups[subKey] = [];
+          subSectionGroups[subKey].push(c);
         });
 
-        const frameKeys = Object.keys(frameGroups).sort((a, b) => {
+        const subSectionKeys = Object.keys(subSectionGroups).sort((a, b) => {
           if (a === '일반') return 1;
           if (b === '일반') return -1;
-          return frameGroups[b].length - frameGroups[a].length;
+          return subSectionGroups[b].length - subSectionGroups[a].length;
         });
 
-        const hasMultipleFrames = frameKeys.length > 1 || (frameKeys.length === 1 && frameKeys[0] !== '일반');
+        const hasMultipleSubs = subSectionKeys.length > 1 || (subSectionKeys.length === 1 && subSectionKeys[0] !== '일반');
 
-        let frameIdx = 0;
-        frameKeys.forEach(framePath => {
-          const frameComments = frameGroups[framePath];
-          const frameId = `${sectionName}__frame${frameIdx++}`;
+        subSectionKeys.forEach(subName => {
+          const subComments = subSectionGroups[subName];
+          const subId = `sub_${globalIdx++}`;
 
-          // Frame 헤더 (접기/펼치기)
-          if (hasMultipleFrames && framePath !== '일반') {
-            html += `<div class="frame-header" data-frame-id="${frameId}">
+          // Level 2 헤더 (Sub-Section)
+          if (hasMultipleSubs && subName !== '일반') {
+            html += `<div class="frame-header" data-frame-id="${subId}">
               <span class="frame-arrow open">▶</span>
-              <span>�</span>
-              <span>${framePath}</span>
-              <span class="frame-count">${frameComments.length}건</span>
+              <span>📂</span>
+              <span>${subName}</span>
+              <span class="frame-count">${subComments.length}건</span>
             </div>`;
-          } else if (hasMultipleFrames && framePath === '일반') {
-            html += `<div class="frame-header" data-frame-id="${frameId}">
+          } else if (hasMultipleSubs && subName === '일반') {
+            html += `<div class="frame-header" data-frame-id="${subId}">
               <span class="frame-arrow open">▶</span>
               <span>📎</span>
               <span>기타 코멘트</span>
-              <span class="frame-count">${frameComments.length}건</span>
+              <span class="frame-count">${subComments.length}건</span>
             </div>`;
           }
 
-          // Frame 콘텐츠 컨테이너
-          if (hasMultipleFrames) {
-            html += `<div class="frame-items-container" data-frame-items-id="${frameId}">`;
+          if (hasMultipleSubs) {
+            html += `<div class="frame-items-container" data-frame-items-id="${subId}">`;
           }
 
-          // Frame-level AI 요약 카드
-          const frameData = allFrameSummaries[framePath];
-          const summary = frameData?.summary;
-          if (summary && summary.title !== '분석 실패') {
-            const statusColor = summary.status === 'Resolved' ? '#4caf50' : '#fb8c00';
-            const statusLabel = summary.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
-            html += `<div class="summary-card">`;
-            html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
-            if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
-            if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
-            html += `</div>`;
-          } else if (!frameData) {
-            html += `<div class="summary-card"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
-          }
-
-          // 쓰레드 단위 렌더링
-          const threads = groupByThread(frameComments);
-          const threadEntries = Object.values(threads).sort((a, b) => {
-            // urgent 먼저, 그 다음 최신순
-            if (a.parent.priority === 'urgent' && b.parent.priority !== 'urgent') return -1;
-            if (b.parent.priority === 'urgent' && a.parent.priority !== 'urgent') return 1;
-            return new Date(b.parent.created_at) - new Date(a.parent.created_at);
+          // Level 3: Frame별 그룹핑 (hierarchy[2:])
+          const frameGroups = {};
+          subComments.forEach(c => {
+            const h = c.hierarchy || [];
+            const frameKey = h.length > 2
+              ? h.slice(2).map(a => a.name).join(' > ')
+              : '일반';
+            if (!frameGroups[frameKey]) frameGroups[frameKey] = [];
+            frameGroups[frameKey].push(c);
           });
 
-          threadEntries.forEach(thread => {
-            const p = thread.parent;
-            const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.discussion;
-            const nodeId = p.resolvedNodeId || p.client_meta?.node_id || '';
-            const urgentBadge = p.priority === 'urgent'
-              ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
-              : '';
-            const checkedAttr = p.checked ? 'checked' : '';
-            const checkedStyle = p.checked ? 'opacity: 0.5;' : '';
-            const replyCount = thread.replies.length;
-            const threadId = `thread_${p.threadId || p.id}`;
+          const frameKeys = Object.keys(frameGroups).sort((a, b) => {
+            if (a === '일반') return 1;
+            if (b === '일반') return -1;
+            return frameGroups[b].length - frameGroups[a].length;
+          });
 
-            html += `<div class="thread-card" data-thread-id="${threadId}" style="${checkedStyle}">`;
+          const hasMultipleFrames = frameKeys.length > 1 || (frameKeys.length === 1 && frameKeys[0] !== '일반');
 
-            // 쓰레드 헤드 (부모 코멘트)
-            html += `<div class="thread-head" data-node-id="${nodeId}">
-              <input type="checkbox" class="comment-checkbox" data-id="${p.id}" ${checkedAttr}>
-              <div class="comment-content">
-                <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
-                <p class="comment-summary">${p.summary || p.message.substring(0, 40)}</p>
-                <p class="comment-meta">@${p.user?.handle || 'unknown'} · ${formatRelativeTime(p.created_at)}</p>
-                ${replyCount > 0 ? `<p class="thread-reply-badge">💬 ${replyCount}개 답글 · 클릭하여 펼치기</p>` : ''}
-              </div>
-            </div>`;
+          frameKeys.forEach(frameName => {
+            const frameComments = frameGroups[frameName];
+            const frameId = `frame_${globalIdx++}`;
 
-            // 답글 리스트 (기본 접힌 상태)
-            if (replyCount > 0) {
-              html += `<div class="thread-replies" data-thread-replies="${threadId}">`;
-              thread.replies.forEach(r => {
-                const rChecked = r.checked ? 'checked' : '';
-                const rStyle = r.checked ? 'opacity: 0.5;' : '';
-                html += `<div class="thread-reply-item" data-node-id="${r.resolvedNodeId || ''}" data-comment-id="${r.id}" style="${rStyle}">
-                  <input type="checkbox" class="comment-checkbox" data-id="${r.id}" ${rChecked}>
-                  <div>
-                    <div class="reply-msg">${r.summary || r.message.substring(0, 60)}</div>
-                    <div class="reply-meta">@${r.user?.handle || 'unknown'} · ${formatRelativeTime(r.created_at)}</div>
-                  </div>
-                </div>`;
-              });
-              html += `</div>`;
+            // Level 3 헤더 (Frame)
+            if (hasMultipleFrames && frameName !== '일반') {
+              html += `<div class="frame-header" data-frame-id="${frameId}" style="padding-left:20px;">
+                <span class="frame-arrow open">▶</span>
+                <span>🖼</span>
+                <span>${frameName}</span>
+                <span class="frame-count">${frameComments.length}건</span>
+              </div>`;
             }
 
-            html += `</div>`; // thread-card
+            if (hasMultipleFrames) {
+              html += `<div class="frame-items-container" data-frame-items-id="${frameId}">`;
+            }
+
+            // Frame-level AI 요약 카드
+            const summaryKey = subName !== '일반' && frameName !== '일반'
+              ? `${subName} > ${frameName}`
+              : subName !== '일반' ? subName : frameName;
+            const frameData = allFrameSummaries[summaryKey];
+            const summary = frameData?.summary;
+            if (summary && summary.title !== '분석 실패') {
+              const statusColor = summary.status === 'Resolved' ? '#4caf50' : '#fb8c00';
+              const statusLabel = summary.status === 'Resolved' ? '✅ 해결됨' : '🔄 진행 중';
+              html += `<div class="summary-card">`;
+              html += `<div class="summary-card-title">💡 ${summary.title} <span style="font-size:10px;color:${statusColor};margin-left:6px;">${statusLabel}</span></div>`;
+              if (summary.issues?.length) html += summary.issues.map(i => `<div class="summary-card-section"><span class="section-icon">📌</span>${i}</div>`).join('');
+              if (summary.decisions?.length) html += summary.decisions.map(d => `<div class="summary-card-section"><span class="section-icon">✅</span>${d}</div>`).join('');
+              html += `</div>`;
+            } else if (!frameData) {
+              html += `<div class="summary-card"><span class="summary-card-loading">💡 요약 생성 중...</span></div>`;
+            }
+
+            // 쓰레드 단위 렌더링
+            const threads = groupByThread(frameComments);
+            const threadEntries = Object.values(threads).sort((a, b) => {
+              if (a.parent.priority === 'urgent' && b.parent.priority !== 'urgent') return -1;
+              if (b.parent.priority === 'urgent' && a.parent.priority !== 'urgent') return 1;
+              return new Date(b.parent.created_at) - new Date(a.parent.created_at);
+            });
+
+            threadEntries.forEach(thread => {
+              const p = thread.parent;
+              const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.discussion;
+              const nodeId = p.resolvedNodeId || p.client_meta?.node_id || '';
+              const urgentBadge = p.priority === 'urgent'
+                ? '<span style="background:#ffebee;color:#e53935;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px;">긴급</span>'
+                : '';
+              const replyCount = thread.replies.length;
+              const threadId = `thread_${p.threadId || p.id}`;
+
+              html += `<div class="thread-card" data-thread-id="${threadId}">`;
+
+              // 쓰레드 헤드 (부모 코멘트)
+              html += `<div class="thread-head" data-node-id="${nodeId}">
+                <div class="comment-content">
+                  <span class="comment-tag ${cat.cssClass}">${cat.label}</span>${urgentBadge}
+                  <p class="comment-summary">${p.summary || p.message.substring(0, 40)}</p>
+                  <p class="comment-meta">@${p.user?.handle || 'unknown'} · ${formatRelativeTime(p.created_at)}</p>
+                  ${replyCount > 0 ? `<p class="thread-reply-badge">💬 ${replyCount}개 답글 · 클릭하여 펼치기</p>` : ''}
+                </div>
+              </div>`;
+
+              // 답글 리스트 (기본 접힌 상태)
+              if (replyCount > 0) {
+                html += `<div class="thread-replies" data-thread-replies="${threadId}">`;
+                thread.replies.forEach(r => {
+                  html += `<div class="thread-reply-item" data-node-id="${r.resolvedNodeId || ''}" data-comment-id="${r.id}">
+                    <div>
+                      <div class="reply-msg">${r.summary || r.message.substring(0, 60)}</div>
+                      <div class="reply-meta">@${r.user?.handle || 'unknown'} · ${formatRelativeTime(r.created_at)}</div>
+                    </div>
+                  </div>`;
+                });
+                html += `</div>`;
+              }
+
+              html += `</div>`; // thread-card
+            });
+
+            if (hasMultipleFrames) {
+              html += `</div>`; // frame-items-container (Level 3)
+            }
           });
 
-          if (hasMultipleFrames) {
-            html += `</div>`; // frame-items-container
+          if (hasMultipleSubs) {
+            html += `</div>`; // frame-items-container (Level 2)
           }
         });
 
-        html += `</div>`; // comment-items-container
+        html += `</div>`; // comment-items-container (Level 1)
         html += `</div>`; // comment-group
       });
 
@@ -1648,7 +1677,7 @@ JSON 형식으로만 응답:
         });
       });
 
-      // Level 2/3: Frame 그룹 토글
+      // Level 2/3: Sub-Section, Frame 그룹 토글
       commentList.querySelectorAll('.frame-header').forEach(header => {
         header.addEventListener('click', () => {
           const frameId = header.getAttribute('data-frame-id');
@@ -1666,23 +1695,24 @@ JSON 형식으로만 응답:
             if (arrow) arrow.classList.remove('open');
           }
 
-          // 부모 컨테이너의 maxHeight 재계산
-          const parentContainer = header.closest('.comment-items-container');
-          if (parentContainer && !parentContainer.classList.contains('collapsed')) {
-            setTimeout(() => {
-              parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
-            }, 350);
-          }
+          // 모든 부모 컨테이너의 maxHeight 재계산
+          let parent = header.closest('.frame-items-container') || header.closest('.comment-items-container');
+          setTimeout(() => {
+            while (parent) {
+              if (!parent.classList.contains('collapsed') && !parent.classList.contains('frame-collapsed')) {
+                parent.style.maxHeight = parent.scrollHeight + 'px';
+              }
+              parent = parent.parentElement?.closest('.frame-items-container') || parent.parentElement?.closest('.comment-items-container');
+              if (parent && parent === header.closest('.comment-items-container')?.parentElement) break;
+            }
+          }, 350);
         });
       });
 
       // 쓰레드 클릭 → 답글 펼침 + 줌인
       commentList.querySelectorAll('.thread-head').forEach(head => {
         head.addEventListener('click', (e) => {
-          if (e.target.type === 'checkbox') return;
-
           const threadCard = head.closest('.thread-card');
-          const threadId = threadCard?.getAttribute('data-thread-id');
           const repliesContainer = threadCard?.querySelector('.thread-replies');
 
           // 답글 토글
@@ -1699,7 +1729,7 @@ JSON 형식으로만 응답:
           // 줌인
           const nodeId = head.getAttribute('data-node-id');
           if (nodeId) {
-            parent.postMessage({
+            window.parent.postMessage({
               pluginMessage: { type: 'zoom-to-node', nodeId }
             }, '*');
           }
@@ -1710,36 +1740,6 @@ JSON 형식으로만 응답:
             setTimeout(() => {
               parentContainer.style.maxHeight = parentContainer.scrollHeight + 'px';
             }, 350);
-          }
-        });
-      });
-
-      // 체크박스 이벤트
-      commentList.querySelectorAll('.comment-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-          e.stopPropagation();
-          const commentId = e.target.getAttribute('data-id');
-          const checked = e.target.checked;
-
-          // UI 상태 업데이트
-          const item = e.target.closest('.thread-card') || e.target.closest('.thread-reply-item');
-          if (item) item.style.opacity = checked ? '0.5' : '1';
-
-          // 데이터 업데이트
-          currentCheckedStates[commentId] = checked;
-          const comment = allClassifiedComments.find(c => c.id === commentId);
-          if (comment) comment.checked = checked;
-
-          // code.ts에 저장 요청
-          parent.postMessage({
-            pluginMessage: { type: 'save-check-state', commentId, checked }
-          }, '*');
-
-          updateTabCounts(allClassifiedComments);
-
-          // 미완료 필터 중이면 완료된 항목 제거
-          if (currentFilter === 'pending' && checked) {
-            setTimeout(() => renderCommentList(allClassifiedComments), 300);
           }
         });
       });
