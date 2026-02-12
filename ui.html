@@ -682,6 +682,7 @@
     .frame-items-container {
       overflow: hidden;
       transition: max-height 0.3s ease;
+      max-height: none;
     }
 
     .frame-items-container.frame-collapsed {
@@ -730,7 +731,7 @@
     }
 
     .thread-replies.thread-open {
-      max-height: 2000px;
+      max-height: none;
     }
 
     .thread-reply-item {
@@ -835,6 +836,7 @@
     .comment-items-container {
       overflow: hidden;
       transition: max-height 0.3s ease;
+      max-height: none;
     }
 
     .comment-items-container.collapsed {
@@ -1833,25 +1835,35 @@ JSON 형식으로만 응답:
       attachCommentEvents();
     }
 
-    // maxHeight 재귀 재계산 헬퍼
-    function recalcAllAncestors(el) {
-      setTimeout(() => {
-        let container = el.closest('.frame-items-container');
-        while (container) {
-          if (!container.classList.contains('frame-collapsed')) {
-            container.style.maxHeight = container.scrollHeight + 'px';
-          }
-          container = container.parentElement?.closest('.frame-items-container');
-        }
-        // 최상위 comment-items-container
-        const topContainer = el.closest('.comment-items-container');
-        if (topContainer && !topContainer.classList.contains('collapsed')) {
-          topContainer.style.maxHeight = topContainer.scrollHeight + 'px';
-        }
-      }, 50);
-    }
-
     function attachCommentEvents() {
+      // Helper to toggle height with animation
+      const toggleHeight = (container, isCollapsed, collapseClass) => {
+        if (isCollapsed) {
+          // Expand: 0 -> scrollHeight -> none
+          container.classList.remove(collapseClass);
+          container.style.maxHeight = container.scrollHeight + 'px';
+
+          // Wait for transition to finish, then remove limit
+          setTimeout(() => {
+            if (!container.classList.contains(collapseClass)) {
+              container.style.maxHeight = 'none';
+              container.style.overflow = 'visible'; // Optional: allows dropdowns/tooltips to escape
+            }
+          }, 350);
+        } else {
+          // Collapse: none -> scrollHeight -> 0
+          container.style.maxHeight = container.scrollHeight + 'px';
+          container.style.overflow = 'hidden';
+          // Force reflow
+          void container.offsetHeight;
+
+          requestAnimationFrame(() => {
+            container.classList.add(collapseClass);
+            container.style.maxHeight = '0';
+          });
+        }
+      };
+
       // Level 1: Section 아코디언 토글
       commentList.querySelectorAll('.group-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1860,14 +1872,13 @@ JSON 형식으로만 응답:
           const arrow = btn.querySelector('.toggle-arrow');
           if (!container) return;
 
-          if (container.classList.contains('collapsed')) {
-            container.classList.remove('collapsed');
-            container.style.maxHeight = container.scrollHeight + 'px';
+          const isCollapsed = container.classList.contains('collapsed');
+          toggleHeight(container, isCollapsed, 'collapsed');
+
+          if (isCollapsed) {
             arrow.classList.add('open');
             btn.innerHTML = `<span class="toggle-arrow open">▶</span> 코멘트 접기`;
           } else {
-            container.classList.add('collapsed');
-            container.style.maxHeight = '0';
             arrow.classList.remove('open');
             const count = container.querySelectorAll('.thread-card').length;
             btn.innerHTML = `<span class="toggle-arrow">▶</span> 코멘트 ${count}건 보기`;
@@ -1883,18 +1894,13 @@ JSON 형식으로만 응답:
           const arrow = header.querySelector('.frame-arrow');
           if (!container) return;
 
-          if (container.classList.contains('frame-collapsed')) {
-            container.classList.remove('frame-collapsed');
-            container.style.maxHeight = container.scrollHeight + 'px';
-            if (arrow) arrow.classList.add('open');
-          } else {
-            container.classList.add('frame-collapsed');
-            container.style.maxHeight = '0';
-            if (arrow) arrow.classList.remove('open');
-          }
+          const isCollapsed = container.classList.contains('frame-collapsed');
+          toggleHeight(container, isCollapsed, 'frame-collapsed');
 
-          // 모든 부모 컨테이너 maxHeight 재귀 재계산
-          recalcAllAncestors(header);
+          if (arrow) {
+            if (isCollapsed) arrow.classList.add('open');
+            else arrow.classList.remove('open');
+          }
         });
       });
 
@@ -1904,12 +1910,30 @@ JSON 형식으로만 응답:
           const threadCard = head.closest('.thread-card');
           const repliesContainer = threadCard?.querySelector('.thread-replies');
 
-          // 답글 토글
+          // 답글 토글 (Custom logic for thread replies simpler transition)
           if (repliesContainer) {
-            repliesContainer.classList.toggle('thread-open');
+            const isOpen = repliesContainer.classList.contains('thread-open');
+
+            if (!isOpen) {
+              // Expand
+              repliesContainer.classList.add('thread-open');
+              repliesContainer.style.maxHeight = repliesContainer.scrollHeight + 'px';
+              setTimeout(() => {
+                if (repliesContainer.classList.contains('thread-open')) repliesContainer.style.maxHeight = 'none';
+              }, 350);
+            } else {
+              // Collapse
+              repliesContainer.style.maxHeight = repliesContainer.scrollHeight + 'px';
+              void repliesContainer.offsetHeight;
+              requestAnimationFrame(() => {
+                repliesContainer.classList.remove('thread-open');
+                repliesContainer.style.maxHeight = '0';
+              });
+            }
+
             const badge = head.querySelector('.thread-reply-badge');
             if (badge) {
-              badge.textContent = repliesContainer.classList.contains('thread-open')
+              badge.textContent = !isOpen
                 ? '💬 답글 접기'
                 : `💬 ${repliesContainer.querySelectorAll('.thread-reply-item').length}개 답글 · 클릭하여 펼치기`;
             }
@@ -1923,8 +1947,7 @@ JSON 형식으로만 응답:
             }, '*');
           }
 
-          // 모든 부모 컨테이너 maxHeight 재귀 재계산
-          recalcAllAncestors(head);
+          // No need for recalcAllAncestors with max-height: none strategy
         });
       });
     }
